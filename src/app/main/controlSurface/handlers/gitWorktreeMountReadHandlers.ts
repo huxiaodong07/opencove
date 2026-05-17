@@ -16,7 +16,6 @@ import type {
 } from '../../../../shared/contracts/dto'
 import { createAppError } from '../../../../shared/errors/appError'
 import {
-  assertFileUriWithinMountRoot,
   invokeRemoteValue,
   isRecord,
   normalizeFileSystemUri,
@@ -145,13 +144,6 @@ export function registerGitWorktreeMountReadHandlers(
         topology: deps.topology,
         mountId: payload.mountId,
       })
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'gitWorktree.statusSummaryInMount uri is outside mount root',
-      })
-
       const repoPath = resolvePathFromUriOrThrow(
         payload.uri,
         'gitWorktree.statusSummaryInMount uri',

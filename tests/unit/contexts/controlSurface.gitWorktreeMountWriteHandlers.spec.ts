@@ -213,4 +213,155 @@ describe('git worktree mount write handlers', () => {
       },
     )
   })
+
+  it('allows local remove outside the mount root when the worktree path is approved', async () => {
+    const repoPath = '/repo'
+    const fixedWorktreePath = '/fixed/worktrees/feature-a'
+    const mountTarget: ResolveMountTargetResult = {
+      mountId: 'mount-local',
+      endpointId: 'local',
+      targetId: 'target-local',
+      rootPath: repoPath,
+      rootUri: toFileUri(repoPath),
+    }
+    const removeWorktree = vi.fn(
+      async (): Promise<RemoveGitWorktreeResult> => ({
+        deletedBranchName: null,
+        branchDeleteError: null,
+        directoryCleanupError: null,
+      }),
+    )
+    const controlSurface = createControlSurface()
+
+    registerGitWorktreeMountHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async targetPath =>
+          targetPath === repoPath || targetPath === fixedWorktreePath,
+      },
+      topology: createTopology(mountTarget),
+      gitWorktreePort: createGitWorktreePort({ removeWorktree }).port,
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'gitWorktree.removeInMount',
+      payload: {
+        mountId: 'mount-local',
+        worktreeUri: toFileUri(fixedWorktreePath),
+        force: true,
+        deleteBranch: false,
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(removeWorktree).toHaveBeenCalledWith({
+      repoPath,
+      worktreePath: fixedWorktreePath,
+      force: true,
+      deleteBranch: false,
+    })
+  })
+
+  it('allows local branch rename outside the mount root when the worktree path is approved', async () => {
+    const repoPath = '/repo'
+    const fixedWorktreePath = '/fixed/worktrees/feature-a'
+    const mountTarget: ResolveMountTargetResult = {
+      mountId: 'mount-local',
+      endpointId: 'local',
+      targetId: 'target-local',
+      rootPath: repoPath,
+      rootUri: toFileUri(repoPath),
+    }
+    const renameBranch = vi.fn(async () => undefined)
+    const controlSurface = createControlSurface()
+
+    registerGitWorktreeMountHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async targetPath =>
+          targetPath === repoPath || targetPath === fixedWorktreePath,
+      },
+      topology: createTopology(mountTarget),
+      gitWorktreePort: createGitWorktreePort({ renameBranch }).port,
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'gitWorktree.renameBranchInMount',
+      payload: {
+        mountId: 'mount-local',
+        worktreeUri: toFileUri(fixedWorktreePath),
+        currentName: 'feature-a',
+        nextName: 'feature-b',
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(renameBranch).toHaveBeenCalledWith({
+      repoPath,
+      worktreePath: fixedWorktreePath,
+      currentName: 'feature-a',
+      nextName: 'feature-b',
+    })
+  })
+
+  it('forwards remote remove payloads outside the mount root to the mounted endpoint', async () => {
+    const fixedWorktreePath = '/remote/fixed/worktrees/feature-a'
+    const mountTarget: ResolveMountTargetResult = {
+      mountId: 'mount-remote',
+      endpointId: 'remote-1',
+      targetId: 'target-remote',
+      rootPath: '/remote/repo',
+      rootUri: toFileUri('/remote/repo'),
+    }
+    const controlSurface = createControlSurface()
+    invokeControlSurfaceMock.mockResolvedValueOnce({
+      httpStatus: 200,
+      result: {
+        __opencoveControlEnvelope: true,
+        ok: true,
+        value: {
+          deletedBranchName: null,
+          branchDeleteError: null,
+          directoryCleanupError: null,
+        },
+      },
+    })
+
+    registerGitWorktreeMountHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: vi.fn(async () => false),
+      },
+      topology: createTopology(mountTarget),
+      gitWorktreePort: createGitWorktreePort().port,
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'gitWorktree.removeInMount',
+      payload: {
+        mountId: 'mount-remote',
+        worktreeUri: toFileUri(fixedWorktreePath),
+        force: true,
+        deleteBranch: true,
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(invokeControlSurfaceMock).toHaveBeenCalledWith(
+      { hostname: '127.0.0.1', port: 39291, token: 'remote-token' },
+      {
+        kind: 'command',
+        id: 'gitWorktree.remove',
+        payload: {
+          repoPath: '/remote/repo',
+          worktreePath: fixedWorktreePath,
+          force: true,
+          deleteBranch: true,
+        },
+      },
+    )
+  })
 })

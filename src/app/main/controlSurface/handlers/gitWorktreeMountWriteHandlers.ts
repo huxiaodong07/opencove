@@ -14,7 +14,6 @@ import type {
 } from '../../../../shared/contracts/dto'
 import { createAppError } from '../../../../shared/errors/appError'
 import {
-  assertFileUriWithinMountRoot,
   invokeRemoteValue,
   isRecord,
   normalizeFileSystemUri,
@@ -189,13 +188,6 @@ export function registerGitWorktreeMountWriteHandlers(
         topology: deps.topology,
         mountId: payload.mountId,
       })
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.worktreeUri,
-        debugMessage: 'gitWorktree.removeInMount worktreeUri is outside mount root',
-      })
-
       const worktreePath = resolvePathFromUriOrThrow(
         payload.worktreeUri,
         'gitWorktree.removeInMount worktreeUri',
@@ -275,13 +267,6 @@ export function registerGitWorktreeMountWriteHandlers(
         topology: deps.topology,
         mountId: payload.mountId,
       })
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.worktreeUri,
-        debugMessage: 'gitWorktree.renameBranchInMount worktreeUri is outside mount root',
-      })
-
       const worktreePath = resolvePathFromUriOrThrow(
         payload.worktreeUri,
         'gitWorktree.renameBranchInMount worktreeUri',
