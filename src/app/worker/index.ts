@@ -99,6 +99,7 @@ async function main(): Promise<void> {
 
   const argv = process.argv.slice(2)
   const userDataPath = readFlagValue(argv, '--user-data') ?? resolveWorkerUserDataDir()
+  process.env['OPENCOVE_USER_DATA_DIR'] = userDataPath
   const bindHostname = readFlagValue(argv, '--hostname') ?? '127.0.0.1'
   const hostname = readFlagValue(argv, '--advertise-hostname') ?? bindHostname
   const port = resolvePort(argv) ?? 0

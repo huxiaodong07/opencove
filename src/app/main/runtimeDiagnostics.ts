@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import type {
@@ -7,9 +6,24 @@ import type {
   RuntimeDiagnosticsSource,
 } from '../../shared/contracts/dto'
 
+function resolveRuntimeDiagnosticsUserDataPath(): string | null {
+  const raw = process.env['OPENCOVE_USER_DATA_DIR']
+  if (typeof raw !== 'string') {
+    return null
+  }
+
+  const normalized = raw.trim()
+  return normalized.length > 0 ? resolve(normalized) : null
+}
+
 function appendRuntimeDiagnosticsFile(line: string): void {
   try {
-    const filePath = resolve(app.getPath('userData'), 'logs', 'runtime-diagnostics.log')
+    const userDataPath = resolveRuntimeDiagnosticsUserDataPath()
+    if (!userDataPath) {
+      return
+    }
+
+    const filePath = resolve(userDataPath, 'logs', 'runtime-diagnostics.log')
     mkdirSync(dirname(filePath), { recursive: true })
     appendFileSync(filePath, `${line}\n`, { encoding: 'utf8', mode: 0o600 })
   } catch {

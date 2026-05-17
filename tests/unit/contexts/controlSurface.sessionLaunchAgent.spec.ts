@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { pathToFileURL } from 'node:url'
+import path from 'node:path'
 import { createControlSurface } from '../../../src/app/main/controlSurface/controlSurface'
 import type { ControlSurfaceContext } from '../../../src/app/main/controlSurface/types'
 import { registerSessionHandlers } from '../../../src/app/main/controlSurface/handlers/sessionHandlers'
@@ -211,7 +212,8 @@ describe('control surface session launch agent', () => {
   })
 
   it('routes space-based agent launches through session.launchAgentInMount when the space resolves to a mount', async () => {
-    const rootPath = '/repo'
+    const rootPath = process.platform === 'win32' ? 'C:\\repo' : '/repo'
+    const worktreePath = path.join(rootPath, 'worktrees', 'feature-a')
     const rootUri = pathToFileURL(rootPath).href
     const appState = {
       formatVersion: 1,
@@ -228,7 +230,7 @@ describe('control surface session launch agent', () => {
             {
               id: 's-mounted',
               name: 'Mounted Space',
-              directoryPath: '/repo/worktrees/feature-a',
+              directoryPath: worktreePath,
               targetMountId: 'mount-1',
               labelColor: null,
               nodeIds: [],
@@ -244,7 +246,7 @@ describe('control surface session launch agent', () => {
     }
 
     const spawnSession = vi.fn(async input => {
-      expect(input.cwd).toBe('/repo/worktrees/feature-a')
+      expect(input.cwd).toBe(worktreePath)
       return { sessionId: 'pty-mounted' }
     })
     const controlSurface = createControlSurface()
@@ -318,7 +320,7 @@ describe('control surface session launch agent', () => {
       spaceId: 's-mounted',
       mountId: 'mount-1',
       targetId: 'target-1',
-      workingDirectory: '/repo/worktrees/feature-a',
+      workingDirectory: worktreePath,
       target: {
         rootPath,
         rootUri,

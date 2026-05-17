@@ -58,6 +58,10 @@ function preserveCanonicalUserDataPath(): void {
   app.setPath('userData', resolve(appDataPath, APP_USER_DATA_DIRECTORY_NAME))
 }
 
+function syncProcessUserDataEnv(): void {
+  process.env['OPENCOVE_USER_DATA_DIR'] = app.getPath('userData')
+}
+
 export function configureAppUserDataPath(): void {
   if (process.env.NODE_ENV !== 'test') {
     preserveCanonicalUserDataPath()
@@ -65,10 +69,12 @@ export function configureAppUserDataPath(): void {
 
   if (process.env.NODE_ENV === 'test' && process.env['OPENCOVE_TEST_USER_DATA_DIR']) {
     app.setPath('userData', resolve(process.env['OPENCOVE_TEST_USER_DATA_DIR']))
+    syncProcessUserDataEnv()
     return
   }
 
   if (app.isPackaged !== false) {
+    syncProcessUserDataEnv()
     return
   }
 
@@ -78,6 +84,7 @@ export function configureAppUserDataPath(): void {
     process.argv.includes('--shared-user-data')
 
   if (wantsSharedUserData) {
+    syncProcessUserDataEnv()
     return
   }
 
@@ -88,6 +95,7 @@ export function configureAppUserDataPath(): void {
     : `${defaultUserDataDir}-dev`
 
   app.setPath('userData', devUserDataDir)
+  syncProcessUserDataEnv()
 }
 
 function parseE2EWindowMode(rawValue: string | undefined): E2EWindowMode | null {
