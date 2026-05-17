@@ -11,12 +11,18 @@ describe('PersistedWorkspaceApproval', () => {
         activeWorkspaceId: 'workspace-1',
         workspaces: [
           { id: 'workspace-1', name: 'One', path: '/tmp/one', nodes: [] },
-          { id: 'workspace-2', name: 'Two', path: '  /tmp/two  ', nodes: [] },
+          {
+            id: 'workspace-2',
+            name: 'Two',
+            path: '  /tmp/two  ',
+            worktreesRoot: '/var/opencove-worktrees',
+            nodes: [],
+          },
           { id: 'workspace-3', name: 'Three', path: '/tmp/one', nodes: [] },
           { id: 'workspace-4', name: 'Four', path: '   ', nodes: [] },
         ],
       }),
-    ).toEqual(['/tmp/one', '/tmp/two'])
+    ).toEqual(['/tmp/one', '/tmp/one/.opencove/worktrees', '/tmp/two', '/var/opencove-worktrees'])
   })
 
   it('waits for startup hydration before answering approvals or accepting writes', async () => {
@@ -53,7 +59,9 @@ describe('PersistedWorkspaceApproval', () => {
 
     await Promise.resolve()
     expect(approvedWorkspaces.isPathApproved).not.toHaveBeenCalled()
-    expect(registeredRoots).toEqual(['/tmp/test-root'])
+    expect(registeredRoots).toContain('/tmp/test-root')
+    expect(registeredRoots).toContain('/tmp/persisted/.opencove/worktrees')
+    expect(registeredRoots).not.toContain('/tmp/later')
 
     releaseHydration?.()
 
@@ -61,7 +69,22 @@ describe('PersistedWorkspaceApproval', () => {
     await expect(registerRootPromise).resolves.toBeUndefined()
     await expect(gate.ready).resolves.toBeUndefined()
 
-    expect(registeredRoots).toEqual(['/tmp/test-root', '/tmp/persisted', '/tmp/later'])
+    expect(registeredRoots).toEqual(
+      expect.arrayContaining([
+        '/tmp/test-root',
+        '/tmp/persisted',
+        '/tmp/persisted/.opencove/worktrees',
+        '/tmp/later',
+      ]),
+    )
+    expect(new Set(registeredRoots)).toEqual(
+      new Set([
+        '/tmp/test-root',
+        '/tmp/persisted',
+        '/tmp/persisted/.opencove/worktrees',
+        '/tmp/later',
+      ]),
+    )
     expect(approvedWorkspaces.isPathApproved).toHaveBeenCalledWith('/tmp/persisted')
   })
 })

@@ -106,7 +106,76 @@ describe('control surface worktree handlers', () => {
     if (result.ok) {
       expect(result.value.projectId).toBe('ws1')
       expect(result.value.repoPath).toBe('/repo')
+      expect(result.value.worktreesRoot).toBe('/repo/.opencove/worktrees')
       expect(result.value.worktrees.length).toBe(1)
+    }
+  })
+
+  it('lists worktrees with a fixed absolute worktrees root', async () => {
+    const appState = {
+      formatVersion: 1,
+      activeWorkspaceId: 'ws1',
+      workspaces: [
+        {
+          id: 'ws1',
+          name: 'Workspace',
+          path: '/repo',
+          worktreesRoot: '/fixed/worktrees',
+          viewport: { x: 0, y: 0, zoom: 1 },
+          isMinimapVisible: true,
+          spaces: [],
+          activeSpaceId: null,
+          nodes: [],
+          spaceArchiveRecords: [],
+        },
+      ],
+      settings: {},
+    }
+
+    const { store } = createStubStore(appState)
+    const controlSurface = createControlSurface()
+    registerWorktreeHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async () => true,
+      },
+      getPersistenceStore: async () => store,
+      gitWorktreePort: {
+        listBranches: async () => ({ current: null, branches: [] }),
+        listWorktrees: async (_input: ListGitWorktreesInput): Promise<ListGitWorktreesResult> => ({
+          worktrees: [],
+        }),
+        getStatusSummary: async () => ({ changedFileCount: 0 }),
+        getDefaultBranch: async () => 'main',
+        createWorktree: async (): Promise<GitWorktreeInfo> => ({
+          path: '/fixed/worktrees/wt1',
+          head: null,
+          branch: 'feature-a',
+        }),
+        removeWorktree: async (): Promise<RemoveGitWorktreeResult> => ({
+          deletedBranchName: null,
+          branchDeleteError: null,
+          directoryCleanupError: null,
+        }),
+        renameBranch: async () => undefined,
+        suggestNames: async () => ({
+          branchName: 'feature-a',
+          worktreeName: 'worktree',
+          provider: 'codex',
+          effectiveModel: null,
+        }),
+      },
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'query',
+      id: 'worktree.list',
+      payload: null,
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.worktreesRoot).toBe('/fixed/worktrees')
     }
   })
 
@@ -196,6 +265,169 @@ describe('control surface worktree handlers', () => {
     }
     expect(written.workspaces[0].spaces[0].directoryPath).toBe('/worktrees/wt1')
     expect(written.workspaces[0].spaces[0].name).toBe('feature-a')
+  })
+
+  it('creates a worktree using a fixed absolute worktrees root', async () => {
+    const appState = {
+      formatVersion: 1,
+      activeWorkspaceId: 'ws1',
+      workspaces: [
+        {
+          id: 'ws1',
+          name: 'Workspace',
+          path: '/repo',
+          worktreesRoot: '/fixed/worktrees',
+          viewport: { x: 0, y: 0, zoom: 1 },
+          isMinimapVisible: true,
+          spaces: [
+            {
+              id: 's1',
+              name: 'Space A',
+              directoryPath: '/repo',
+              labelColor: null,
+              nodeIds: [],
+              rect: null,
+            },
+          ],
+          activeSpaceId: null,
+          nodes: [],
+          spaceArchiveRecords: [],
+        },
+      ],
+      settings: {},
+    }
+
+    const { store } = createStubStore(appState)
+    let createInput: CreateGitWorktreeInput | null = null
+
+    const controlSurface = createControlSurface()
+    registerWorktreeHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async () => true,
+      },
+      getPersistenceStore: async () => store,
+      gitWorktreePort: {
+        listBranches: async () => ({ current: null, branches: [] }),
+        listWorktrees: async () => ({ worktrees: [] }),
+        getStatusSummary: async () => ({ changedFileCount: 0 }),
+        getDefaultBranch: async () => 'main',
+        createWorktree: async (input: CreateGitWorktreeInput): Promise<GitWorktreeInfo> => {
+          createInput = input
+          return {
+            path: '/fixed/worktrees/wt1',
+            head: null,
+            branch: 'feature-a',
+          }
+        },
+        removeWorktree: async (): Promise<RemoveGitWorktreeResult> => ({
+          deletedBranchName: null,
+          branchDeleteError: null,
+          directoryCleanupError: null,
+        }),
+        renameBranch: async () => undefined,
+        suggestNames: async () => ({
+          branchName: 'feature-a',
+          worktreeName: 'worktree',
+          provider: 'codex',
+          effectiveModel: null,
+        }),
+      },
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'worktree.create',
+      payload: { spaceId: 's1', name: 'feature-a' },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(createInput).toEqual({
+      repoPath: '/repo',
+      worktreesRoot: '/fixed/worktrees',
+      branchMode: { kind: 'new', name: 'feature-a', startPoint: 'HEAD' },
+    })
+  })
+
+  it('rejects create when a fixed worktrees root is not approved', async () => {
+    const appState = {
+      formatVersion: 1,
+      activeWorkspaceId: 'ws1',
+      workspaces: [
+        {
+          id: 'ws1',
+          name: 'Workspace',
+          path: '/repo',
+          worktreesRoot: '/fixed/worktrees',
+          viewport: { x: 0, y: 0, zoom: 1 },
+          isMinimapVisible: true,
+          spaces: [
+            {
+              id: 's1',
+              name: 'Space A',
+              directoryPath: '/repo',
+              labelColor: null,
+              nodeIds: [],
+              rect: null,
+            },
+          ],
+          activeSpaceId: null,
+          nodes: [],
+          spaceArchiveRecords: [],
+        },
+      ],
+      settings: {},
+    }
+
+    const { store } = createStubStore(appState)
+    let createCalled = false
+
+    const controlSurface = createControlSurface()
+    registerWorktreeHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async targetPath => targetPath === '/repo',
+      },
+      getPersistenceStore: async () => store,
+      gitWorktreePort: {
+        listBranches: async () => ({ current: null, branches: [] }),
+        listWorktrees: async () => ({ worktrees: [] }),
+        getStatusSummary: async () => ({ changedFileCount: 0 }),
+        getDefaultBranch: async () => 'main',
+        createWorktree: async (): Promise<GitWorktreeInfo> => {
+          createCalled = true
+          return {
+            path: '/fixed/worktrees/wt1',
+            head: null,
+            branch: 'feature-a',
+          }
+        },
+        removeWorktree: async (): Promise<RemoveGitWorktreeResult> => ({
+          deletedBranchName: null,
+          branchDeleteError: null,
+          directoryCleanupError: null,
+        }),
+        renameBranch: async () => undefined,
+        suggestNames: async () => ({
+          branchName: 'feature-a',
+          worktreeName: 'worktree',
+          provider: 'codex',
+          effectiveModel: null,
+        }),
+      },
+    })
+
+    const result = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'worktree.create',
+      payload: { spaceId: 's1', name: 'feature-a' },
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('common.approved_path_required')
+    }
+    expect(createCalled).toBe(false)
   })
 
   it('rejects invalid payloads', async () => {

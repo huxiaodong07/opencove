@@ -1,5 +1,6 @@
 import { normalizePersistedAppState } from '../../../../platform/persistence/sqlite/normalize'
 import type { ApprovedWorkspaceStore } from './ApprovedWorkspaceStore'
+import { resolveWorktreesRoot } from '../../../worktree/application/resolveWorktreesRoot'
 
 function normalizeRootPath(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -18,15 +19,24 @@ export function listPersistedWorkspaceApprovalRoots(appState: unknown): string[]
 
   const seen = new Set<string>()
   const roots: string[] = []
-
-  for (const workspace of normalized.workspaces) {
-    const rootPath = normalizeRootPath(workspace.path)
+  const appendRoot = (value: unknown): void => {
+    const rootPath = normalizeRootPath(value)
     if (!rootPath || seen.has(rootPath)) {
-      continue
+      return
     }
 
     seen.add(rootPath)
     roots.push(rootPath)
+  }
+
+  for (const workspace of normalized.workspaces) {
+    const rootPath = normalizeRootPath(workspace.path)
+    if (!rootPath) {
+      continue
+    }
+
+    appendRoot(rootPath)
+    appendRoot(resolveWorktreesRoot(rootPath, workspace.worktreesRoot))
   }
 
   return roots

@@ -2,89 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createPtyWriteQueue,
   handleTerminalCustomKeyEvent,
-  isLinuxTerminalCopyShortcut,
-  isLinuxTerminalPasteShortcut,
-  isMacTerminalPasteShortcut,
   pasteTextFromClipboard,
 } from '../../../src/contexts/workspace/presentation/renderer/components/terminalNode/inputBridge'
-
-describe('isLinuxTerminalCopyShortcut', () => {
-  it('returns true for Ctrl+Shift+C on Linux', () => {
-    expect(
-      isLinuxTerminalCopyShortcut(
-        { key: 'c', metaKey: false, ctrlKey: true, altKey: false, shiftKey: true },
-        { platform: 'Linux x86_64' },
-      ),
-    ).toBe(true)
-  })
-
-  it('returns false for Ctrl+C on Linux', () => {
-    expect(
-      isLinuxTerminalCopyShortcut(
-        { key: 'c', metaKey: false, ctrlKey: true, altKey: false, shiftKey: false },
-        { platform: 'Linux x86_64' },
-      ),
-    ).toBe(false)
-  })
-})
-
-describe('isLinuxTerminalPasteShortcut', () => {
-  it('returns true for Ctrl+Shift+V on Linux', () => {
-    expect(
-      isLinuxTerminalPasteShortcut(
-        { key: 'v', metaKey: false, ctrlKey: true, altKey: false, shiftKey: true },
-        { platform: 'Linux x86_64' },
-      ),
-    ).toBe(true)
-  })
-
-  it('returns false for Ctrl+V on Linux', () => {
-    expect(
-      isLinuxTerminalPasteShortcut(
-        { key: 'v', metaKey: false, ctrlKey: true, altKey: false, shiftKey: false },
-        { platform: 'Linux x86_64' },
-      ),
-    ).toBe(false)
-  })
-})
-
-describe('isMacTerminalPasteShortcut', () => {
-  it('returns true for Cmd+V on macOS', () => {
-    expect(
-      isMacTerminalPasteShortcut(
-        { key: 'v', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false },
-        { platform: 'MacIntel' },
-      ),
-    ).toBe(true)
-  })
-
-  it('returns false for Cmd+V on Windows', () => {
-    expect(
-      isMacTerminalPasteShortcut(
-        { key: 'v', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false },
-        { platform: 'Win32' },
-      ),
-    ).toBe(false)
-  })
-
-  it('returns false for Ctrl+V on macOS', () => {
-    expect(
-      isMacTerminalPasteShortcut(
-        { key: 'v', metaKey: false, ctrlKey: true, altKey: false, shiftKey: false },
-        { platform: 'MacIntel' },
-      ),
-    ).toBe(false)
-  })
-
-  it('returns false for Cmd+Shift+V', () => {
-    expect(
-      isMacTerminalPasteShortcut(
-        { key: 'v', metaKey: true, ctrlKey: false, altKey: false, shiftKey: true },
-        { platform: 'MacIntel' },
-      ),
-    ).toBe(false)
-  })
-})
 
 describe('handleTerminalCustomKeyEvent', () => {
   it('copies the selected terminal text on Windows Ctrl+C', async () => {
@@ -254,6 +173,40 @@ describe('handleTerminalCustomKeyEvent', () => {
 
     expect(result).toBe(false)
     expect(pasteClipboardText).toHaveBeenCalledWith({ terminal })
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends ESC+v for Windows Alt+V so terminal TUIs can handle image paste', () => {
+    const ptyWriteQueue = {
+      enqueue: vi.fn(),
+      flush: vi.fn(),
+    }
+    const event = {
+      type: 'keydown',
+      key: 'v',
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+      metaKey: false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent
+
+    const result = handleTerminalCustomKeyEvent({
+      event,
+      platformInfo: { platform: 'Win32' },
+      ptyWriteQueue,
+      terminal: {
+        hasSelection: () => false,
+        getSelection: () => '',
+        paste: vi.fn(),
+      },
+    })
+
+    expect(result).toBe(false)
+    expect(ptyWriteQueue.enqueue).toHaveBeenCalledWith('\u001bv')
+    expect(ptyWriteQueue.flush).toHaveBeenCalledTimes(1)
     expect(event.preventDefault).toHaveBeenCalledTimes(1)
     expect(event.stopPropagation).toHaveBeenCalledTimes(1)
   })

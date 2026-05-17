@@ -127,12 +127,6 @@ export function registerGitWorktreeMountWriteHandlers(
         mountId: payload.mountId,
       })
 
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.worktreesRootUri,
-        debugMessage: 'gitWorktree.createInMount worktreesRootUri is outside mount root',
-      })
-
       const worktreesRoot = resolvePathFromUriOrThrow(
         payload.worktreesRootUri,
         'gitWorktree.createInMount worktreesRootUri',

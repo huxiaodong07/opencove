@@ -1,21 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from '@app/renderer/i18n'
-
-function resolveWorktreesRoot(workspacePath: string, worktreesRoot: string): string {
-  const trimmed = worktreesRoot.trim()
-  if (trimmed.length === 0) {
-    return `${workspacePath.replace(/[/]+$/, '')}/.opencove/worktrees`
-  }
-  if (/^([a-zA-Z]:[/]|\/)/.test(trimmed)) {
-    return trimmed.replace(/[/]+$/, '')
-  }
-  const base = workspacePath.replace(/[/]+$/, '')
-  const normalizedCustom = trimmed
-    .replace(/^[.][/]+/, '')
-    .replace(/^[/]+/, '')
-    .replace(/[/]+$/, '')
-  return `${base}/${normalizedCustom}`
-}
+import { resolveWorktreesRoot } from '@contexts/worktree/application/resolveWorktreesRoot'
 
 function getFolderName(path: string): string {
   const parts = path.split(/[/]/).filter(Boolean)

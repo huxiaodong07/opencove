@@ -66,6 +66,20 @@ export function isWindowsTerminalPasteShortcut(
   return event.key === 'Insert' && event.shiftKey && !event.ctrlKey
 }
 
+export function isWindowsTerminalAltVPasteImageShortcut(
+  event: Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>,
+  platformInfo: PlatformInfo | undefined = navigator,
+): boolean {
+  return (
+    isWindowsPlatform(platformInfo) &&
+    event.key.toLowerCase() === 'v' &&
+    event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey
+  )
+}
+
 export function isMacPlatform(platformInfo: PlatformInfo | undefined = navigator): boolean {
   if (!platformInfo) {
     return false
@@ -299,6 +313,14 @@ export function handleTerminalCustomKeyEvent({
     event.preventDefault()
     event.stopPropagation()
     onOpenFind?.()
+    return false
+  }
+
+  if (event.type === 'keydown' && isWindowsTerminalAltVPasteImageShortcut(event, platformInfo)) {
+    event.preventDefault()
+    event.stopPropagation()
+    ptyWriteQueue.enqueue('\u001bv')
+    ptyWriteQueue.flush()
     return false
   }
 

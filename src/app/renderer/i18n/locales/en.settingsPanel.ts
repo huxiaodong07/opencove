@@ -478,7 +478,8 @@ export const enSettingsPanel = {
     workspacePathLabel: 'Workspace Path',
     workspacePathHelp: 'Project root for {{name}}.',
     worktreeRootLabel: 'Worktree Root',
-    worktreeRootHelp: 'Relative path is based on project root.',
+    worktreeRootHelp:
+      'Relative paths are based on the project root. Absolute paths use a fixed worktree root.',
     worktreeRootPlaceholder: '.opencove/worktrees',
     resolvedPathLabel: 'Resolved Path',
     resolvedPathHelp: 'Where new worktrees will be created.',

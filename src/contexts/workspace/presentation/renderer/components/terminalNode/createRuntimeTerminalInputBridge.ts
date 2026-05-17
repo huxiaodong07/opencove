@@ -1,7 +1,11 @@
 import type { Terminal } from '@xterm/xterm'
 import type { TerminalDiagnosticsLogInput } from '@shared/contracts/dto'
 import { parseTerminalCommandInput, type TerminalCommandInputState } from './commandInput'
-import { createPtyWriteQueue, handleTerminalCustomKeyEvent } from './inputBridge'
+import {
+  createPtyWriteQueue,
+  handleTerminalCustomKeyEvent,
+  isWindowsTerminalAltVPasteImageShortcut,
+} from './inputBridge'
 import { isAutomaticTerminalReply } from './inputClassification'
 import { hasRecentTerminalUserInteraction } from './userInteractionWindow'
 
@@ -28,6 +32,7 @@ function formatInputHeadHex(value: string, limit = 12): string {
 
 export function createRuntimeTerminalInputBridge({
   terminal,
+  container,
   sessionId,
   openTerminalFind,
   onCommandRunRef,
@@ -41,6 +46,7 @@ export function createRuntimeTerminalInputBridge({
   terminalDiagnostics,
 }: {
   terminal: Terminal
+  container: HTMLElement | null
   sessionId: string
   openTerminalFind: () => void
   onCommandRunRef: { current: ((command: string) => void) | undefined }
@@ -134,6 +140,24 @@ export function createRuntimeTerminalInputBridge({
       onOpenFind: openTerminalFind,
     }),
   )
+
+  const handleKeyDownCapture = (event: KeyboardEvent): void => {
+    if (!(event.target instanceof Node) || !container?.contains(event.target)) {
+      return
+    }
+
+    if (!isWindowsTerminalAltVPasteImageShortcut(event)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    ptyWriteQueue.enqueue('\u001bv')
+    ptyWriteQueue.flush()
+  }
+
+  // Capture before xterm can normalize Windows Alt+V into a plain "v".
+  window.addEventListener('keydown', handleKeyDownCapture, true)
 
   const dataDisposable = terminal.onData(data => {
     if (suppressPtyResizeRef.current) {
@@ -299,6 +323,7 @@ export function createRuntimeTerminalInputBridge({
       shouldForwardTerminalData = true
     },
     dispose: () => {
+      window.removeEventListener('keydown', handleKeyDownCapture, true)
       dataDisposable.dispose()
       binaryDisposable.dispose()
       ptyWriteQueue.dispose()

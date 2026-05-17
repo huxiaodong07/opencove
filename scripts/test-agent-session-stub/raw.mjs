@@ -10,6 +10,14 @@ const ENABLE_FOCUS_EVENTS = '\u001b[?1004h'
 const DISABLE_FOCUS_EVENTS = '\u001b[?1004l'
 const DEVICE_STATUS_REPORT = '\u001b[6n'
 
+function bufferToHex(buffer) {
+  if (!buffer || buffer.length === 0) {
+    return ''
+  }
+
+  return Buffer.from(buffer).toString('hex')
+}
+
 function extractBracketedPastePayload(buffer) {
   const startIndex = buffer.indexOf(BRACKETED_PASTE_START)
   if (startIndex === -1) {
@@ -147,6 +155,56 @@ export async function runRawBracketedPasteEchoScenario() {
         settle('[opencove-test-paste] ctrl-v')
       }
     })
+    process.stdin.resume()
+  })
+
+  await sleep(20_000)
+}
+
+export async function runRawAltVPasteShortcutEchoScenario() {
+  process.stdout.write('[opencove-test-alt-v] ready\n')
+
+  await new Promise(resolveScenario => {
+    let settled = false
+
+    const cleanup = () => {
+      process.stdin.off('data', handleData)
+      if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
+        process.stdin.setRawMode(false)
+      }
+    }
+
+    const settle = message => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      clearTimeout(timeout)
+      cleanup()
+      process.stdout.write(`${message}\n`)
+      resolveScenario()
+    }
+
+    const handleData = chunk => {
+      const hex = bufferToHex(chunk)
+      if (hex.length === 0) {
+        return
+      }
+
+      settle(`[opencove-test-alt-v] hex=${hex}`)
+    }
+
+    const timeout = setTimeout(() => {
+      settle('[opencove-test-alt-v] timeout')
+    }, 8_000)
+
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
+      process.stdin.setRawMode(true)
+    }
+
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', handleData)
     process.stdin.resume()
   })
 

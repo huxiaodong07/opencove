@@ -1,5 +1,6 @@
 import type { CreateGitWorktreeBranchMode, GitWorktreeInfo } from '@shared/contracts/dto'
 import type { TranslateFn } from '@app/renderer/i18n'
+export { resolveWorktreesRoot } from '../../../application/resolveWorktreesRoot'
 
 export type BranchMode = 'new' | 'existing'
 export type SpaceWorktreeViewMode = 'create' | 'archive'
@@ -87,25 +88,6 @@ export function resolveWorktreeRepoRootPath(
   }
 
   return shortest?.path ?? workspacePath
-}
-
-export function resolveWorktreesRoot(workspacePath: string, worktreesRoot: string): string {
-  const trimmed = worktreesRoot.trim()
-  if (trimmed.length === 0) {
-    return `${workspacePath.replace(/[\\/]+$/, '')}/.opencove/worktrees`
-  }
-
-  if (/^([a-zA-Z]:[\\/]|\/)/.test(trimmed)) {
-    return trimmed.replace(/[\\/]+$/, '')
-  }
-
-  const base = workspacePath.replace(/[\\/]+$/, '')
-  const normalizedCustom = trimmed
-    .replace(/^[.][\\/]+/, '')
-    .replace(/^[\\/]+/, '')
-    .replace(/[\\/]+$/, '')
-
-  return `${base}/${normalizedCustom}`
 }
 
 function hasAsciiControlCharacter(value: string): boolean {

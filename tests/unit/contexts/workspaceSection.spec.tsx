@@ -27,7 +27,7 @@ describe('WorkspaceSection', () => {
       '/repo/demo',
     )
     expect(screen.getByTestId('settings-worktree-root')).toHaveValue('.opencove/worktrees')
-    expect(screen.getByText(/Relative path is based on project root/i)).toBeVisible()
+    expect(screen.getByText(/Absolute paths use a fixed worktree root/i)).toBeVisible()
     expect(screen.getByTestId('settings-resolved-worktree-path-display')).toHaveTextContent(
       '.../.opencove/worktrees',
     )
@@ -40,6 +40,29 @@ describe('WorkspaceSection', () => {
       target: { value: '/tmp/custom-worktrees' },
     })
     expect(onChangeWorktreesRoot).toHaveBeenCalledWith('/tmp/custom-worktrees')
+  })
+
+  it('shows an absolute worktree root as a fixed resolved path', () => {
+    render(
+      <WorkspaceSection
+        workspaceName="Demo Project"
+        workspacePath="/repo/demo"
+        worktreesRoot="/var/opencove-worktrees"
+        onChangeWorktreesRoot={() => undefined}
+        pullRequestBaseBranchOptions={[]}
+        onChangePullRequestBaseBranchOptions={() => undefined}
+        environmentVariables={{}}
+        onChangeEnvironmentVariables={() => undefined}
+      />,
+    )
+
+    expect(screen.getByTestId('settings-resolved-worktree-path-display')).toHaveTextContent(
+      '/var/opencove-worktrees',
+    )
+    expect(screen.getByTestId('settings-resolved-worktree-path-display')).toHaveAttribute(
+      'title',
+      '/var/opencove-worktrees',
+    )
   })
 
   it('shows guidance when no project is selected', () => {

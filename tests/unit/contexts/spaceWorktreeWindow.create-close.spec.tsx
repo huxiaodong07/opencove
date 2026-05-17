@@ -107,6 +107,45 @@ describe('SpaceWorktreeWindow create flow', () => {
     })
   })
 
+  it('creates from a fixed absolute worktrees root', async () => {
+    const { create } = installWorktreeApi()
+    const onClose = vi.fn()
+    const onUpdateSpaceDirectory = vi.fn()
+
+    render(
+      <SpaceWorktreeWindow
+        spaceId="space-1"
+        initialViewMode="create"
+        spaces={createSpaces('/repo')}
+        nodes={createNodes()}
+        workspacePath="/repo"
+        worktreesRoot="/fixed/worktrees"
+        agentSettings={DEFAULT_AGENT_SETTINGS}
+        onClose={onClose}
+        onUpdateSpaceDirectory={onUpdateSpaceDirectory}
+        getBlockingNodes={() => ({ agentNodeIds: [], terminalNodeIds: [] })}
+        closeNodesById={async () => undefined}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('space-worktree-create')).not.toBeDisabled()
+    })
+
+    fireEvent.change(screen.getByTestId('space-worktree-branch-name'), {
+      target: { value: 'space/demo' },
+    })
+    fireEvent.click(screen.getByTestId('space-worktree-create'))
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith({
+        repoPath: '/repo',
+        worktreesRoot: '/fixed/worktrees',
+        branchMode: { kind: 'new', name: 'space/demo', startPoint: 'main' },
+      })
+    })
+  })
+
   it('surfaces an actionable error when creating a worktree in a repo with no commits', async () => {
     installWorktreeApi({
       create: vi.fn(async () => {
