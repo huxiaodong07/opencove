@@ -42,6 +42,34 @@ export function listPersistedWorkspaceApprovalRoots(appState: unknown): string[]
   return roots
 }
 
+export async function registerPersistedWorkspaceApprovalRoots(options: {
+  approvedWorkspaces: ApprovedWorkspaceStore
+  appState: unknown
+  extraRoots?: string[]
+}): Promise<void> {
+  const persistedRoots = listPersistedWorkspaceApprovalRoots(options.appState)
+  const extraRoots = Array.isArray(options.extraRoots) ? options.extraRoots : []
+  const roots = [...extraRoots, ...persistedRoots]
+
+  const seen = new Set<string>()
+  const uniqueRoots: string[] = []
+  for (const rootPath of roots) {
+    const normalizedRoot = normalizeRootPath(rootPath)
+    if (!normalizedRoot || seen.has(normalizedRoot)) {
+      continue
+    }
+
+    seen.add(normalizedRoot)
+    uniqueRoots.push(normalizedRoot)
+  }
+
+  await Promise.all(
+    uniqueRoots.map(async rootPath => {
+      await options.approvedWorkspaces.registerRoot(rootPath)
+    }),
+  )
+}
+
 export function createPersistedWorkspaceApprovalGate(options: {
   approvedWorkspaces: ApprovedWorkspaceStore
   readAppState: () => Promise<unknown | null>
@@ -54,27 +82,11 @@ export function createPersistedWorkspaceApprovalGate(options: {
   const ready = (async () => {
     try {
       const appState = await options.readAppState()
-      const persistedRoots = listPersistedWorkspaceApprovalRoots(appState)
-      const extraRoots = Array.isArray(options.extraRoots) ? options.extraRoots : []
-      const roots = [...extraRoots, ...persistedRoots]
-
-      const seen = new Set<string>()
-      const uniqueRoots: string[] = []
-      for (const rootPath of roots) {
-        const normalizedRoot = normalizeRootPath(rootPath)
-        if (!normalizedRoot || seen.has(normalizedRoot)) {
-          continue
-        }
-
-        seen.add(normalizedRoot)
-        uniqueRoots.push(normalizedRoot)
-      }
-
-      await Promise.all(
-        uniqueRoots.map(async rootPath => {
-          await options.approvedWorkspaces.registerRoot(rootPath)
-        }),
-      )
+      await registerPersistedWorkspaceApprovalRoots({
+        approvedWorkspaces: options.approvedWorkspaces,
+        appState,
+        extraRoots: options.extraRoots,
+      })
     } catch (error) {
       options.onError?.(error)
     }

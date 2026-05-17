@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createPersistedWorkspaceApprovalGate,
   listPersistedWorkspaceApprovalRoots,
+  registerPersistedWorkspaceApprovalRoots,
 } from '../../../src/contexts/workspace/infrastructure/approval/PersistedWorkspaceApproval'
 
 describe('PersistedWorkspaceApproval', () => {
@@ -86,5 +87,54 @@ describe('PersistedWorkspaceApproval', () => {
       ]),
     )
     expect(approvedWorkspaces.isPathApproved).toHaveBeenCalledWith('/tmp/persisted')
+  })
+
+  it('registers unique roots from a written app state', async () => {
+    const registeredRoots: string[] = []
+    const approvedWorkspaces = {
+      registerRoot: vi.fn(async (rootPath: string) => {
+        registeredRoots.push(rootPath)
+      }),
+      isPathApproved: vi.fn(async () => false),
+    }
+
+    await registerPersistedWorkspaceApprovalRoots({
+      approvedWorkspaces,
+      extraRoots: ['/tmp/test-root', '/tmp/test-root'],
+      appState: {
+        activeWorkspaceId: 'workspace-1',
+        workspaces: [
+          {
+            id: 'workspace-1',
+            name: 'One',
+            path: '/tmp/one',
+            worktreesRoot: '',
+            nodes: [],
+          },
+          {
+            id: 'workspace-2',
+            name: 'Two',
+            path: '/tmp/two',
+            worktreesRoot: '/fixed/worktrees',
+            nodes: [],
+          },
+          {
+            id: 'workspace-3',
+            name: 'Three',
+            path: '/tmp/two',
+            worktreesRoot: '/fixed/worktrees',
+            nodes: [],
+          },
+        ],
+      },
+    })
+
+    expect(registeredRoots).toEqual([
+      '/tmp/test-root',
+      '/tmp/one',
+      '/tmp/one/.opencove/worktrees',
+      '/tmp/two',
+      '/fixed/worktrees',
+    ])
   })
 })

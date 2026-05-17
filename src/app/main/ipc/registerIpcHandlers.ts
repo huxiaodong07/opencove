@@ -38,7 +38,10 @@ import { registerCliIpcHandlers } from './registerCliIpcHandlers'
 import { registerRemoteAgentIpcHandlers } from './registerRemoteAgentIpcHandlers'
 import { registerWebsiteWindowIpcHandlers } from './registerWebsiteWindowIpcHandlers'
 import { registerControlSurfaceIpcHandlers } from './registerControlSurfaceIpcHandlers'
-import { createPersistedWorkspaceApprovalGate } from '../../../contexts/workspace/infrastructure/approval/PersistedWorkspaceApproval'
+import {
+  createPersistedWorkspaceApprovalGate,
+  registerPersistedWorkspaceApprovalRoots,
+} from '../../../contexts/workspace/infrastructure/approval/PersistedWorkspaceApproval'
 import type { BrowserProfileStore } from '../../../contexts/browser/infrastructure/main/BrowserProfileStore'
 import { createBrowserProfileStore } from '../../../contexts/browser/infrastructure/main/BrowserProfileStore'
 import { registerBrowserProfileIpcHandlers } from '../../../contexts/browser/presentation/main-ipc/register'
@@ -163,7 +166,22 @@ export function registerIpcHandlers(deps?: {
     registerReleaseNotesIpcHandlers(releaseNotesService),
     registerWorkspaceIpcHandlers(guardedApprovedWorkspaces),
     registerFilesystemIpcHandlers(guardedApprovedWorkspaces),
-    registerPersistenceIpcHandlers(getPersistenceStore),
+    registerPersistenceIpcHandlers(getPersistenceStore, {
+      onAppStateWritten: async appState => {
+        try {
+          await registerPersistedWorkspaceApprovalRoots({
+            approvedWorkspaces: guardedApprovedWorkspaces,
+            appState,
+            extraRoots: startupApprovalRoots,
+          })
+        } catch (error) {
+          const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+          process.stderr.write(
+            `[opencove] Failed to refresh approved workspaces from persistence write: ${detail}\n`,
+          )
+        }
+      },
+    }),
     registerWorktreeIpcHandlers(guardedApprovedWorkspaces),
     registerIntegrationIpcHandlers(guardedApprovedWorkspaces),
     registerWindowChromeIpcHandlers(),

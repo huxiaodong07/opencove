@@ -27,7 +27,7 @@ async function delay(ms: number): Promise<void> {
 
 export function registerPersistenceIpcHandlers(
   getStore: () => Promise<PersistenceStore>,
-  options: { maxRawBytes?: number } = {},
+  options: { maxRawBytes?: number; onAppStateWritten?: (state: unknown) => Promise<void> } = {},
 ): IpcRegistrationDisposable {
   registerHandledIpc(
     IPC_CHANNELS.persistenceReadWorkspaceStateRaw,
@@ -125,7 +125,12 @@ export function registerPersistenceIpcHandlers(
         }
 
         const store = await getStore()
-        return await store.writeAppState(normalized.state)
+        const result = await store.writeAppState(normalized.state)
+        if (result.ok) {
+          await options.onAppStateWritten?.(normalized.state)
+        }
+
+        return result
       } catch (error) {
         return {
           ok: false,
