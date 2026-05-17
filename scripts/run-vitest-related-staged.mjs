@@ -27,6 +27,7 @@ const TEST_RELATED_EXTENSIONS = new Set([
   '.mts',
   '.cts',
 ])
+const WINDOWS_FILE_CHUNK_SIZE = 25
 
 function resolveFilesFromStaged() {
   const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], {
@@ -77,16 +78,6 @@ if (files.length === 0) {
   process.exit(0)
 }
 
-const args = ['exec', 'vitest', 'related', '--run', '--passWithNoTests']
-
-if (process.platform === 'win32') {
-  for (const excludedGlob of WINDOWS_UNSUPPORTED_TEST_GLOBS) {
-    args.push('--exclude', excludedGlob)
-  }
-}
-
-args.push(...files)
-
 function normalizeWindowsPath(value) {
   return value.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
 }
@@ -120,7 +111,7 @@ function resolveWindowsSubstDriveForCwd() {
   return null
 }
 
-function resolveWindowsVitestInvocation() {
+function resolveWindowsVitestInvocation(chunkFiles) {
   const driveRoot = resolveWindowsSubstDriveForCwd()
   if (!driveRoot) {
     return null
@@ -150,20 +141,52 @@ function resolveWindowsVitestInvocation() {
       '--config',
       path.join(driveRoot, 'vitest.config.ts'),
       ...WINDOWS_UNSUPPORTED_TEST_GLOBS.flatMap(excludedGlob => ['--exclude', excludedGlob]),
-      ...files,
+      ...chunkFiles,
     ],
   }
 }
 
-const windowsVitestInvocation = resolveWindowsVitestInvocation()
-const result = spawnSync(
-  windowsVitestInvocation?.command ?? PNPM_COMMAND,
-  windowsVitestInvocation?.args ?? args,
-  {
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    stdio: 'inherit',
-  },
-)
+function resolvePnpmVitestArgs(chunkFiles) {
+  const args = ['exec', 'vitest', 'related', '--run', '--passWithNoTests']
 
-process.exit(result.status ?? 1)
+  if (process.platform === 'win32') {
+    for (const excludedGlob of WINDOWS_UNSUPPORTED_TEST_GLOBS) {
+      args.push('--exclude', excludedGlob)
+    }
+  }
+
+  args.push(...chunkFiles)
+  return args
+}
+
+function chunkFilesForPlatform(fileList) {
+  if (process.platform !== 'win32') {
+    return [fileList]
+  }
+
+  const chunks = []
+  for (let index = 0; index < fileList.length; index += WINDOWS_FILE_CHUNK_SIZE) {
+    chunks.push(fileList.slice(index, index + WINDOWS_FILE_CHUNK_SIZE))
+  }
+
+  return chunks
+}
+
+for (const chunk of chunkFilesForPlatform(files)) {
+  const windowsVitestInvocation = resolveWindowsVitestInvocation(chunk)
+  const result = spawnSync(
+    windowsVitestInvocation?.command ?? PNPM_COMMAND,
+    windowsVitestInvocation?.args ?? resolvePnpmVitestArgs(chunk),
+    {
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+      stdio: 'inherit',
+    },
+  )
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1)
+  }
+}
+
+process.exit(0)

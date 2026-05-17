@@ -92,6 +92,26 @@ describe('CommandEnvironmentService', () => {
     expect(getShellEnvironmentSnapshotMock).not.toHaveBeenCalled()
   })
 
+  it('prepends explicit command PATH without dropping the base command environment PATH', async () => {
+    setPlatform('linux')
+    process.env.NODE_ENV = 'production'
+    delete process.env.OPENCOVE_TRUST_PROCESS_ENV
+
+    getShellEnvironmentSnapshotMock.mockResolvedValue({
+      env: {
+        PATH: '/usr/bin:/bin:/root/.local/bin',
+      },
+      shellPath: '/bin/bash',
+      source: 'default_shell',
+      diagnostics: [],
+    })
+
+    const { getCommandExecutionEnvironment } = await importCommandEnvironmentService()
+    const env = await getCommandExecutionEnvironment({ PATH: '/custom/bin' })
+
+    expect(env.PATH?.split(':')).toEqual(['/custom/bin', '/usr/bin', '/bin', '/root/.local/bin'])
+  })
+
   it('enriches Windows process PATH with stable fallback directories for wrapper runtimes', async () => {
     setPlatform('win32')
     process.env.NODE_ENV = 'production'
@@ -103,6 +123,8 @@ describe('CommandEnvironmentService', () => {
     process.env.ProgramFiles = 'C:\\Program Files'
     delete process.env['ProgramFiles(x86)']
     process.env.ProgramData = 'C:\\ProgramData'
+    process.env.WINDIR = 'C:\\Windows'
+    process.env.SystemRoot = 'C:\\Windows'
     process.env.APPDATA = 'C:\\Users\\tester\\AppData\\Roaming'
     process.env.LOCALAPPDATA = 'C:\\Users\\tester\\AppData\\Local'
     process.env.NVM_SYMLINK = 'C:\\nvm4w\\nodejs'
@@ -115,6 +137,7 @@ describe('CommandEnvironmentService', () => {
     expect(snapshot.env.PATH?.split(';')).toEqual([
       'C:\\Windows\\System32',
       'C:\\nvm4w\\nodejs',
+      'C:\\Windows\\System32\\OpenSSH',
       'C:\\Users\\tester\\AppData\\Roaming\\npm',
       'C:\\Users\\tester\\AppData\\Local\\pnpm',
       'C:\\Users\\tester\\AppData\\Local\\Volta\\bin',
@@ -157,6 +180,7 @@ describe('CommandEnvironmentService', () => {
       NODE_ENV: 'production',
       Path: [
         'C:\\Windows\\System32',
+        'C:\\Windows\\System32\\OpenSSH',
         'C:\\Users\\tester\\AppData\\Roaming\\npm',
         'C:\\Users\\tester\\AppData\\Local\\pnpm',
         'C:\\Users\\tester\\AppData\\Local\\Volta\\bin',

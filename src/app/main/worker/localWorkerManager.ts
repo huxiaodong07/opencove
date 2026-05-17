@@ -12,34 +12,11 @@ import { readHomeWorkerConfigFile } from './homeWorkerConfig'
 import { resolvePackagedWorkerScriptPath } from '../runtime/opencoveRuntimePaths'
 import { removeConnectionFile } from '../controlSurface/http/connectionFile'
 import { removeWorkerSingleInstanceLock } from '../../../platform/process/workerSingleInstanceLockFile'
-import { isWorkerConnectionAlive } from './workerConnectionHealth'
+import { isReusableLocalWorkerConnection } from './localWorkerCompatibility'
+import { isTruthyEnv, resolveForwardedLocalWorkerDiagnosticsEnv } from './localWorkerDiagnosticsEnv'
+import { parseWorkerReadyPayload } from './workerReadyPayload'
 
-function isTruthyEnv(rawValue: string | undefined): boolean {
-  if (!rawValue) {
-    return false
-  }
-
-  return rawValue === '1' || rawValue.toLowerCase() === 'true'
-}
-
-export function resolveForwardedLocalWorkerDiagnosticsEnv(
-  envSource: NodeJS.ProcessEnv = process.env,
-): Record<string, string> {
-  const env: Record<string, string> = {}
-  const keys = [
-    'OPENCOVE_AGENT_LAUNCH_DIAGNOSTICS',
-    'OPENCOVE_TERMINAL_DIAGNOSTICS',
-    'OPENCOVE_TERMINAL_INPUT_DIAGNOSTICS',
-  ]
-
-  for (const key of keys) {
-    if (isTruthyEnv(envSource[key])) {
-      env[key] = '1'
-    }
-  }
-
-  return env
-}
+export { resolveForwardedLocalWorkerDiagnosticsEnv } from './localWorkerDiagnosticsEnv'
 
 function resolveWorkerScriptPath(): string {
   if (app.isPackaged) {
@@ -95,6 +72,7 @@ function toDto(info: {
   port: number
   token: string
   createdAt: string
+  appVersion: string | null
   startedBy?: 'cli' | 'desktop'
 }): WorkerConnectionInfoDto {
   return {
@@ -104,6 +82,7 @@ function toDto(info: {
     port: info.port,
     token: info.token,
     createdAt: info.createdAt,
+    appVersion: info.appVersion,
     ...(info.startedBy ? { startedBy: info.startedBy } : {}),
   }
 }
@@ -216,7 +195,7 @@ export async function getLocalWorkerStatus(): Promise<WorkerStatusResult> {
     return { status: 'stopped', connection: null }
   }
 
-  return (await isWorkerConnectionAlive(connection))
+  return (await isReusableLocalWorkerConnection(connection))
     ? { status: 'running', connection }
     : { status: 'stopped', connection: null }
 }
@@ -248,7 +227,7 @@ async function waitForExistingWorkerConnection(
 
   const poll = async (): Promise<WorkerConnectionInfoDto | null> => {
     const connection = await resolveConnectionFromUserData({ requireLivePid: false })
-    if (connection && (await isWorkerConnectionAlive(connection))) {
+    if (connection && (await isReusableLocalWorkerConnection(connection))) {
       return connection
     }
 
@@ -337,30 +316,12 @@ async function waitForWorkerReadyPayload(
     rl.on('line', line => {
       try {
         const parsed = JSON.parse(line) as unknown
-        if (!parsed || typeof parsed !== 'object') {
+        const info = parseWorkerReadyPayload(parsed)
+        if (!info) {
           return
         }
 
-        const record = parsed as Record<string, unknown>
-        const hostname = typeof record.hostname === 'string' ? record.hostname : null
-        const resolvedPort = typeof record.port === 'number' ? record.port : null
-        const token = typeof record.token === 'string' ? record.token : null
-        const pid = typeof record.pid === 'number' ? record.pid : null
-        const version = typeof record.version === 'number' ? record.version : null
-        const createdAt = typeof record.createdAt === 'string' ? record.createdAt : null
-
-        if (!hostname || !resolvedPort || !token || !pid || !version || !createdAt) {
-          return
-        }
-
-        resolveReady({
-          version,
-          pid,
-          hostname,
-          port: resolvedPort,
-          token,
-          createdAt,
-        })
+        resolveReady(info)
       } catch {
         // ignore non-JSON output
       }
@@ -379,7 +340,7 @@ async function spawnWorkerAndWaitForLiveConnection(
   const child = spawnWorkerChild(args, userDataPath)
   const info = await waitForWorkerReadyPayload(child)
 
-  if (!(await isWorkerConnectionAlive(info))) {
+  if (!(await isReusableLocalWorkerConnection(info))) {
     await stopOwnedLocalWorker().catch(() => undefined)
     await repairStaleLocalWorkerFiles(userDataPath, null)
     throw new Error('Worker ready payload endpoint is not reachable')
@@ -406,7 +367,7 @@ export async function startLocalWorker(): Promise<WorkerStatusResult> {
   const userDataPath = app.getPath('userData')
   const existing = await resolveConnectionFromUserData({ requireLivePid: false })
   if (existing) {
-    if (await isWorkerConnectionAlive(existing)) {
+    if (await isReusableLocalWorkerConnection(existing)) {
       return { status: 'running', connection: existing }
     }
 

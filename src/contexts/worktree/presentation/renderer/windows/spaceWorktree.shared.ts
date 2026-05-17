@@ -1,4 +1,8 @@
-import type { CreateGitWorktreeBranchMode, GitWorktreeInfo } from '@shared/contracts/dto'
+import type {
+  CreateGitWorktreeBranchMode,
+  GitWorktreeInfo,
+  RemoveGitWorktreeResult,
+} from '@shared/contracts/dto'
 import type { TranslateFn } from '@app/renderer/i18n'
 export { resolveWorktreesRoot } from '../../../application/resolveWorktreesRoot'
 
@@ -16,6 +20,12 @@ export interface UpdateSpaceDirectoryOptions {
   renameSpaceTo?: string
 }
 
+export interface ArchiveWorktreeCleanup {
+  spaceId: string
+  worktreePath: string
+  deleteBranch: boolean
+}
+
 export type PendingOperation =
   | {
       kind: 'create'
@@ -24,8 +34,7 @@ export type PendingOperation =
     }
   | {
       kind: 'archive'
-      worktreePath: string | null
-      deleteBranch: boolean
+      worktreeCleanups: ArchiveWorktreeCleanup[]
       archiveSpace: boolean
       force: boolean
     }
@@ -45,6 +54,29 @@ export function getWorktreeApiMethod<K extends keyof WorktreeApiClient>(
   }
 
   return candidate as WorktreeApiClient[K]
+}
+
+export async function removeArchiveWorktreesInOrder({
+  cleanups,
+  force,
+  removeWorktree,
+  repoPath,
+}: {
+  cleanups: ArchiveWorktreeCleanup[]
+  force: boolean
+  removeWorktree: WorktreeApiClient['remove']
+  repoPath: string
+}): Promise<RemoveGitWorktreeResult[]> {
+  return cleanups.reduce<Promise<RemoveGitWorktreeResult[]>>(async (previousResults, cleanup) => {
+    const results = await previousResults
+    const result = await removeWorktree({
+      repoPath,
+      worktreePath: cleanup.worktreePath,
+      force,
+      deleteBranch: cleanup.deleteBranch,
+    })
+    return [...results, result]
+  }, Promise.resolve([]))
 }
 
 export function normalizeComparablePath(pathValue: string): string {

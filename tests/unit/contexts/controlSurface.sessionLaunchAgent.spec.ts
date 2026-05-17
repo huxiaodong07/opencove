@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createControlSurface } from '../../../src/app/main/controlSurface/controlSurface'
 import type { ControlSurfaceContext } from '../../../src/app/main/controlSurface/types'
 import { registerSessionHandlers } from '../../../src/app/main/controlSurface/handlers/sessionHandlers'
@@ -212,7 +212,7 @@ describe('control surface session launch agent', () => {
   })
 
   it('routes space-based agent launches through session.launchAgentInMount when the space resolves to a mount', async () => {
-    const rootPath = process.platform === 'win32' ? 'C:\\repo' : '/repo'
+    const rootPath = path.join(process.cwd(), '.tmp-mounted-repo')
     const worktreePath = path.join(rootPath, 'worktrees', 'feature-a')
     const rootUri = pathToFileURL(rootPath).href
     const appState = {
