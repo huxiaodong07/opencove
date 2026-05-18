@@ -104,11 +104,14 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
     [setNodes],
   )
 
-  const resolveMountId = useCallback(
-    async (nodeId: string): Promise<string | null | undefined> => {
+  const resolveSpaceLaunchBindingForNode = useCallback(
+    async (nodeId: string) => {
       const owningSpace = spacesRef.current.find(space => space.nodeIds.includes(nodeId)) ?? null
+      if (!owningSpace) {
+        return null
+      }
       try {
-        const resolvedMountContext = await resolveSpaceMountLaunchContext({
+        return await resolveSpaceMountLaunchContext({
           workspaceId,
           workspacePath,
           space: owningSpace,
@@ -116,7 +119,6 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
           onSpacesChange,
           onRequestPersistFlush,
         })
-        return resolvedMountContext.mountId
       } catch (error) {
         setAgentNodeFailure(
           nodeId,
@@ -155,9 +157,18 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
         nodeId,
         launchData.taskId ?? null,
       )
-      const requestedExecutionDirectory = executionDirectory ?? launchData.executionDirectory
+      const resolvedLaunchBinding = await resolveSpaceLaunchBindingForNode(nodeId)
+      if (resolvedLaunchBinding === undefined) {
+        return
+      }
+      const requestedExecutionDirectory =
+        executionDirectory ??
+        resolvedLaunchBinding?.workingDirectory ??
+        launchData.executionDirectory
       const requestedExpectedDirectory =
-        expectedDirectory === undefined ? launchData.expectedDirectory : expectedDirectory
+        expectedDirectory === undefined
+          ? (resolvedLaunchBinding?.workingDirectory ?? launchData.expectedDirectory)
+          : expectedDirectory
       const requestedResumeSessionId =
         mode === 'resume'
           ? normalizeOptionalString(
@@ -170,15 +181,11 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
         setAgentNodeFailure(nodeId, t('messages.resumeSessionMissing'))
         return
       }
-
       if (mode === 'new' && launchData.prompt.trim().length === 0) {
         setAgentNodeFailure(nodeId, t('messages.agentPromptRequired'))
         return
       }
-      const mountId = await resolveMountId(nodeId)
-      if (mountId === undefined) {
-        return
-      }
+      const mountId = resolvedLaunchBinding?.mountId ?? null
       const env = resolveEnabledEnvForAgent({ rows: agentEnvByProvider[launchData.provider] ?? [] })
       const normalizedExecutablePathOverride =
         agentExecutablePathOverrideByProvider?.[launchData.provider]?.trim() ?? ''
@@ -192,7 +199,6 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
       const launchFrameSize = resolveAgentRuntimeLaunchFrameSize(node)
       if (!mountId && launchData.shouldCreateDirectory && launchData.directoryMode === 'custom') {
         await window.opencoveApi.workspace.ensureDirectory({ path: requestedExecutionDirectory })
-
         if (!isAgentLaunchTokenCurrent(nodeId, launchToken)) {
           return
         }
@@ -201,7 +207,6 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
       if (node.data.sessionId.length > 0) {
         invalidateCachedTerminalScreenState(nodeId, node.data.sessionId)
         await window.opencoveApi.pty.kill({ sessionId: node.data.sessionId })
-
         if (!isAgentLaunchTokenCurrent(nodeId, launchToken)) {
           return
         }
@@ -255,17 +260,14 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
           terminalFontSize,
           terminalDisplayMetrics,
         })
-
         if (!isAgentLaunchTokenCurrent(nodeId, launchToken)) {
           void window.opencoveApi.pty.kill({ sessionId: launched.sessionId }).catch(() => undefined)
           return
         }
-
         if (!nodesRef.current.some(item => item.id === nodeId)) {
           void window.opencoveApi.pty.kill({ sessionId: launched.sessionId }).catch(() => undefined)
           return
         }
-
         setNodes(
           prevNodes =>
             prevNodes.map(item => {
@@ -343,7 +345,7 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
       environmentVariables,
       isAgentLaunchTokenCurrent,
       nodesRef,
-      resolveMountId,
+      resolveSpaceLaunchBindingForNode,
       setAgentNodeFailure,
       setNodes,
       t,

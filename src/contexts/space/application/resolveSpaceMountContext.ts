@@ -1,5 +1,6 @@
 import type { MountDto } from '@shared/contracts/dto'
 import type { SpaceBoundary } from '@shared/types/spaceBoundary'
+import { toFileUri } from '../../filesystem/domain/fileUri'
 import { isPathInsideOrEqual, resolveSpaceBoundaryScope } from './spaceBoundaryPolicy'
 
 export interface SpaceMountContextLike {
@@ -42,6 +43,39 @@ function normalizeComparablePath(pathValue: string): string {
 
 function isPathInside(rootPath: string, targetPath: string): boolean {
   return isPathInsideOrEqual(rootPath, targetPath)
+}
+
+function resolveScopeForWorkingDirectory(options: {
+  mount: MountDto
+  workingDirectory: string
+  boundaryScope: ReturnType<typeof resolveSpaceBoundaryScope>
+}): ResolvedSpaceMountContext['scope'] {
+  const boundaryScope = options.boundaryScope
+  if (boundaryScope !== null) {
+    return {
+      rootPath: boundaryScope.rootPath,
+      rootUri:
+        boundaryScope.rootUri.trim().length > 0
+          ? boundaryScope.rootUri
+          : toFileUri(boundaryScope.rootPath),
+    }
+  }
+
+  if (isPathInside(options.mount.rootPath, options.workingDirectory)) {
+    return {
+      rootPath: options.workingDirectory,
+      rootUri:
+        normalizeComparablePath(options.workingDirectory) ===
+        normalizeComparablePath(options.mount.rootPath)
+          ? options.mount.rootUri
+          : toFileUri(options.workingDirectory),
+    }
+  }
+
+  return {
+    rootPath: options.workingDirectory,
+    rootUri: toFileUri(options.workingDirectory),
+  }
 }
 
 function resolveBestMount(mounts: MountDto[], directoryPath: string): MountDto | null {
@@ -94,25 +128,16 @@ export function resolveSpaceMountContext(options: {
   }
 
   const boundaryScope = resolveSpaceBoundaryScope(options.space?.boundary, fallbackMount.mountId)
-  const isBoundaryScopeWithinMount =
-    boundaryScope !== null && isPathInside(fallbackMount.rootPath, boundaryScope.rootPath)
-  const directoryWithinMount =
-    rawDirectoryPath !== null && isPathInside(fallbackMount.rootPath, rawDirectoryPath)
-  const workingDirectory = isBoundaryScopeWithinMount
+  const workingDirectory = boundaryScope
     ? boundaryScope.rootPath
-    : directoryWithinMount
+    : rawDirectoryPath !== null
       ? rawDirectoryPath
       : fallbackMount.rootPath
-  const scope = isBoundaryScopeWithinMount
-    ? {
-        rootPath: boundaryScope.rootPath,
-        rootUri:
-          boundaryScope.rootUri.trim().length > 0 ? boundaryScope.rootUri : fallbackMount.rootUri,
-      }
-    : {
-        rootPath: fallbackMount.rootPath,
-        rootUri: fallbackMount.rootUri,
-      }
+  const scope = resolveScopeForWorkingDirectory({
+    mount: fallbackMount,
+    workingDirectory,
+    boundaryScope,
+  })
 
   const shouldRepairTargetMountId = currentTargetMountId !== fallbackMount.mountId
   const shouldRepairDirectoryPath =

@@ -67,4 +67,57 @@ describe('resolveSpaceMountLaunchContext', () => {
     ])
     expect(onRequestPersistFlush).toHaveBeenCalledTimes(1)
   })
+
+  it('preserves a fixed worktree root outside the selected mount root', async () => {
+    const onSpacesChange = vi.fn()
+    const onRequestPersistFlush = vi.fn()
+    const space = {
+      id: 'space-fixed-root',
+      name: 'Feature',
+      directoryPath: '/fixed/worktrees/feature-a',
+      targetMountId: 'mount-1',
+      labelColor: null,
+      nodeIds: [],
+      rect: null,
+    }
+
+    vi.stubGlobal('window', {
+      opencoveApi: {
+        controlSurface: {
+          invoke: vi.fn(async () => ({
+            projectId: 'workspace-1',
+            mounts: [
+              {
+                mountId: 'mount-1',
+                projectId: 'workspace-1',
+                name: 'Primary',
+                sortOrder: 0,
+                endpointId: 'local',
+                targetId: 'target-1',
+                rootPath: '/repo',
+                rootUri: 'file:///repo',
+                createdAt: '2026-05-10T00:00:00.000Z',
+                updatedAt: '2026-05-10T00:00:00.000Z',
+              },
+            ],
+          })),
+        },
+      },
+    })
+
+    const resolved = await resolveSpaceMountLaunchContext({
+      workspaceId: 'workspace-1',
+      workspacePath: '/repo',
+      space,
+      spaces: [space],
+      onSpacesChange,
+      onRequestPersistFlush,
+    })
+
+    expect(resolved.mountId).toBe('mount-1')
+    expect(resolved.workingDirectory).toBe('/fixed/worktrees/feature-a')
+    expect(resolved.space).toBe(space)
+    expect(onSpacesChange).not.toHaveBeenCalled()
+    expect(onRequestPersistFlush).not.toHaveBeenCalled()
+  })
 })

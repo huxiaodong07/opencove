@@ -12,7 +12,6 @@ import {
 } from '../../../../contexts/settings/domain/agentSettings'
 import { normalizePersistedAppState } from '../../../../platform/persistence/sqlite/normalize'
 import type {
-  LaunchAgentSessionInMountInput,
   LaunchAgentSessionInput,
   LaunchAgentSessionResult,
 } from '../../../../shared/contracts/dto'
@@ -22,21 +21,16 @@ import {
   resolveProviderFromSettings,
   resolveSessionLaunchSpawn,
 } from './sessionLaunchSupport'
-import { normalizeLaunchAgentEnv } from './sessionLaunchAgentEnv'
+import { normalizeLaunchAgentInMountPayload } from './sessionLaunchAgentInMountPayload'
 import { startAgentSessionStateWatcherIfEnabled } from './sessionStateWatcherStart'
 import type { PtyStreamHub } from '../ptyStream/ptyStreamHub'
 import { resolveWorkerAgentTestStub } from './sessionAgentTestStub'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
-import { assertFileUriWithinRootUri } from '../topology/fileUriScope'
 import { invokeControlSurface } from '../remote/controlSurfaceHttpClient'
 import type { MultiEndpointPtyRuntime } from '../ptyStream/multiEndpointPtyRuntime'
 import type { SessionRecord } from './sessionRecords'
 import {
-  isRecord,
-  normalizeAgentProviderId,
-  normalizeFileSystemUri,
   normalizeOptionalString,
-  normalizeOptionalPositiveInt,
   resolvePathFromFileSystemUriOrThrow,
 } from './sessionLaunchPayloadSupport'
 import {
@@ -51,100 +45,6 @@ const OPENCODE_SERVER_HOSTNAME = '127.0.0.1'
 function resolveOpenCodeEmbeddedXdgStateHome(userDataPath: string): string {
   const normalized = userDataPath.trim()
   return normalized.length > 0 ? normalized : process.cwd()
-}
-
-function normalizeLaunchAgentInMountPayload(payload: unknown): LaunchAgentSessionInMountInput {
-  if (!isRecord(payload)) {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount.',
-    })
-  }
-
-  const mountId = normalizeOptionalString(payload.mountId)
-  if (!mountId) {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount mountId.',
-    })
-  }
-
-  const cwdUriRaw = payload.cwdUri
-  if (cwdUriRaw !== undefined && cwdUriRaw !== null && typeof cwdUriRaw !== 'string') {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount cwdUri.',
-    })
-  }
-
-  const promptRaw = payload.prompt
-  if (typeof promptRaw !== 'string') {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount prompt.',
-    })
-  }
-
-  const provider = normalizeAgentProviderId(payload.provider, 'session.launchAgentInMount provider')
-
-  const modelRaw = payload.model
-  if (modelRaw !== undefined && modelRaw !== null && typeof modelRaw !== 'string') {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount model.',
-    })
-  }
-
-  const modeRaw = payload.mode
-  if (modeRaw !== undefined && modeRaw !== null && typeof modeRaw !== 'string') {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount mode.',
-    })
-  }
-
-  const resumeSessionIdRaw = payload.resumeSessionId
-  if (
-    resumeSessionIdRaw !== undefined &&
-    resumeSessionIdRaw !== null &&
-    typeof resumeSessionIdRaw !== 'string'
-  ) {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount resumeSessionId.',
-    })
-  }
-
-  const agentFullAccess = payload.agentFullAccess
-  if (
-    agentFullAccess !== undefined &&
-    agentFullAccess !== null &&
-    typeof agentFullAccess !== 'boolean'
-  ) {
-    throw createAppError('common.invalid_input', {
-      debugMessage: 'Invalid payload for session.launchAgentInMount agentFullAccess.',
-    })
-  }
-
-  const env = normalizeLaunchAgentEnv(payload.env)
-  const executablePathOverride =
-    payload.executablePathOverride === undefined || payload.executablePathOverride === null
-      ? null
-      : normalizeOptionalString(payload.executablePathOverride)
-  const cols = normalizeOptionalPositiveInt(payload.cols)
-  const rows = normalizeOptionalPositiveInt(payload.rows)
-
-  return {
-    mountId,
-    cwdUri:
-      cwdUriRaw === undefined || cwdUriRaw === null
-        ? null
-        : normalizeFileSystemUri(cwdUriRaw, 'session.launchAgentInMount cwdUri'),
-    prompt: promptRaw.trim(),
-    provider,
-    mode: modeRaw === 'resume' ? 'resume' : 'new',
-    model: modelRaw === null ? null : normalizeOptionalString(modelRaw),
-    resumeSessionId:
-      resumeSessionIdRaw === null ? null : normalizeOptionalString(resumeSessionIdRaw),
-    env,
-    executablePathOverride,
-    agentFullAccess: agentFullAccess ?? null,
-    cols,
-    rows,
-  }
 }
 
 export function registerSessionLaunchAgentInMountHandler(
@@ -185,17 +85,9 @@ export function registerSessionLaunchAgentInMountHandler(
           debugMessage: `Unknown mountId: ${payload.mountId}`,
         })
       }
-
       const cwdUri = payload.cwdUri ?? target.rootUri
-      assertFileUriWithinRootUri({
-        rootUri: target.rootUri,
-        uri: cwdUri,
-        debugMessage: 'session.launchAgentInMount cwdUri is outside mount root',
-      })
-
       const cwd = resolvePathFromFileSystemUriOrThrow(cwdUri, 'session.launchAgentInMount cwdUri')
       const mode = payload.mode ?? 'new'
-
       if (target.endpointId !== 'local') {
         logAgentLaunchInfo(
           'control-surface-mount-remote-forward-start',
@@ -218,7 +110,6 @@ export function registerSessionLaunchAgentInMountHandler(
             debugMessage: `Remote endpoint unavailable: ${target.endpointId}`,
           })
         }
-
         const remoteResult = await (async () => {
           const { result } = await invokeControlSurface(endpoint, {
             kind: 'command',
@@ -229,11 +120,9 @@ export function registerSessionLaunchAgentInMountHandler(
           if (!result) {
             throw createAppError('worker.unavailable')
           }
-
           if (result.ok === false) {
             throw createAppError(result.error)
           }
-
           const agentLaunchResult = await invokeControlSurface(endpoint, {
             kind: 'command',
             id: 'session.launchAgent',
@@ -255,7 +144,6 @@ export function registerSessionLaunchAgentInMountHandler(
           if (!agentLaunchResult.result) {
             throw createAppError('worker.unavailable')
           }
-
           if (agentLaunchResult.result.ok === false) {
             logAgentLaunchError(
               'control-surface-mount-remote-launch-failed',
@@ -272,17 +160,14 @@ export function registerSessionLaunchAgentInMountHandler(
             )
             throw createAppError(agentLaunchResult.result.error)
           }
-
           return agentLaunchResult.result.value as LaunchAgentSessionResult
         })()
-
         const remoteSessionId = normalizeOptionalString(remoteResult.sessionId)
         if (!remoteSessionId) {
           throw createAppError('worker.unavailable', {
             debugMessage: 'Remote session.launchAgent returned an invalid session id.',
           })
         }
-
         const homeSessionId = deps.ptyRuntime.registerRemoteSession({
           endpointId: target.endpointId,
           remoteSessionId,
@@ -302,7 +187,6 @@ export function registerSessionLaunchAgentInMountHandler(
             rows: payload.rows ?? 24,
           },
         )
-
         deps.ptyStreamHub.registerSessionMetadata({
           sessionId: homeSessionId,
           kind: 'agent',
@@ -313,7 +197,6 @@ export function registerSessionLaunchAgentInMountHandler(
           cols: payload.cols ?? 80,
           rows: payload.rows ?? 24,
         })
-
         const executionContext = resolveExecutionContextDto(
           remoteResult.executionContext.workingDirectory,
           {
@@ -325,13 +208,13 @@ export function registerSessionLaunchAgentInMountHandler(
             endpointKind: 'remote_worker',
             targetRootPath: target.rootPath,
             targetRootUri: target.rootUri,
-            scopeRootPath: target.rootPath,
-            scopeRootUri: target.rootUri,
+            scopeRootPath:
+              remoteResult.executionContext.scope?.rootPath ??
+              remoteResult.executionContext.workingDirectory,
+            scopeRootUri: remoteResult.executionContext.scope?.rootUri ?? cwdUri,
           },
         )
-
         const startedAtMs = Date.parse(remoteResult.startedAt)
-
         deps.sessions.set(homeSessionId, {
           sessionId: homeSessionId,
           provider: remoteResult.provider,
@@ -351,25 +234,21 @@ export function registerSessionLaunchAgentInMountHandler(
             remoteSessionId,
           },
         })
-
         return {
           ...remoteResult,
           sessionId: homeSessionId,
           executionContext,
         }
       }
-
       const isApproved = await deps.approvedWorkspaces.isPathApproved(cwd)
       if (!isApproved) {
         throw createAppError('common.approved_path_required', {
           debugMessage: 'session.launchAgentInMount cwd is outside approved roots',
         })
       }
-
       const store = await deps.getPersistenceStore()
       const normalized = normalizePersistedAppState(await store.readAppState())
       const agentSettings = normalizeAgentSettings(normalized?.settings)
-
       const provider = resolveProviderFromSettings(payload.provider ?? null, agentSettings)
       const model = payload.model ?? resolveAgentModel(agentSettings, provider)
       const executablePathOverride =
@@ -391,7 +270,6 @@ export function registerSessionLaunchAgentInMountHandler(
           rows: payload.rows ?? 24,
         },
       )
-
       const testStub = resolveWorkerAgentTestStub({
         provider,
         cwd,
@@ -399,7 +277,6 @@ export function registerSessionLaunchAgentInMountHandler(
         model,
         resumeSessionId: mode === 'resume' ? (payload.resumeSessionId ?? null) : null,
       })
-
       const opencodeServer =
         provider === 'opencode'
           ? {
@@ -407,7 +284,6 @@ export function registerSessionLaunchAgentInMountHandler(
               port: await reserveLoopbackPort(OPENCODE_SERVER_HOSTNAME),
             }
           : null
-
       const launchCommand = testStub
         ? { command: testStub.command, args: testStub.args, effectiveModel: model }
         : buildAgentLaunchCommand({
@@ -431,13 +307,10 @@ export function registerSessionLaunchAgentInMountHandler(
           executablePathOverride,
         }),
       )
-
       const startedAtMs = Date.now()
       const startedAt = new Date(startedAtMs).toISOString()
-
       const opencodeTuiConfigPath =
         provider === 'opencode' ? await ensureOpenCodeEmbeddedTuiConfigPath() : null
-
       const sessionEnv =
         opencodeServer && provider === 'opencode'
           ? {
@@ -447,10 +320,8 @@ export function registerSessionLaunchAgentInMountHandler(
               ...(opencodeTuiConfigPath ? { OPENCODE_TUI_CONFIG: opencodeTuiConfigPath } : {}),
             }
           : undefined
-
       const launchEnv =
         testStub?.env || sessionEnv ? { ...(testStub?.env ?? {}), ...(sessionEnv ?? {}) } : null
-
       const mergedEnv =
         payload.env && Object.keys(payload.env).length > 0
           ? { ...(launchEnv ?? {}), ...payload.env }
@@ -575,8 +446,8 @@ export function registerSessionLaunchAgentInMountHandler(
         endpointKind: 'local',
         targetRootPath: target.rootPath,
         targetRootUri: target.rootUri,
-        scopeRootPath: target.rootPath,
-        scopeRootUri: target.rootUri,
+        scopeRootPath: cwd,
+        scopeRootUri: cwdUri,
       })
 
       const record: SessionRecord = {

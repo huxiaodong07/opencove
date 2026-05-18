@@ -41,7 +41,8 @@ Mount:
 
 - 将 project 内的工作目录绑定到 endpoint。
 - 保存 `rootPath/rootUri`、排序和显示名称。
-- Mount root 是 filesystem、PTY 和 worktree 操作的 scope。
+- Mount root 是 filesystem 操作的 scope，也是 worktree 操作选择 endpoint 的依据。
+- Agent/Terminal 的执行目录由 Space 的 `boundary` / `directoryPath` 决定；当项目配置固定 worktree 根目录时，执行目录可以在 mount root 外，但必须仍位于同一 endpoint 的 approved root 内。
 
 Session:
 
@@ -96,7 +97,8 @@ src/
 ## Invariants
 
 1. UI 输入只表达 intent；执行目录、mount、endpoint 的解析在 application/usecase 或 topology owner 内完成。
-2. 一个 Space 的 mount-aware 文件/PTY/worktree 操作必须通过 `targetMountId` 解析 scope。
+2. 一个 Space 的 mount-aware 文件/PTY/worktree 操作必须通过 `targetMountId` 解析 endpoint。
+   文件操作的路径仍受 mount root 限制；Agent/Terminal cwd 可以使用同 endpoint 上已批准的固定 worktree root。
 3. 只携带 `spaceId` 的通用 launch/spawn intent，在命中 mount 时也必须先解析 mount，再委派到 `*InMount` 路径执行。
 4. Remote mount 操作必须路由到目标 Worker，不得由 Desktop 猜测远端路径。
 5. Durable workspace state 与 runtime observation 分开建模。

@@ -52,10 +52,29 @@ describe('resolveSpaceMountContext', () => {
     })
   })
 
-  it('falls back to the mount root when directoryPath escapes the selected mount', () => {
+  it('keeps an off-mount fixed worktree directory when the selected mount is valid', () => {
     const resolved = resolveSpaceMountContext({
       space: {
         directoryPath: '/tmp/elsewhere',
+        targetMountId: 'mount-1',
+      },
+      workspacePath: '/repo',
+      mounts: [createMount({})],
+    })
+
+    expect(resolved.mount?.mountId).toBe('mount-1')
+    expect(resolved.workingDirectory).toBe('/tmp/elsewhere')
+    expect(resolved.scope).toEqual({
+      rootPath: '/tmp/elsewhere',
+      rootUri: 'file:///tmp/elsewhere',
+    })
+    expect(resolved.repair).toBeNull()
+  })
+
+  it('falls back to the mount root when a selected mount has no directory path', () => {
+    const resolved = resolveSpaceMountContext({
+      space: {
+        directoryPath: '',
         targetMountId: 'mount-1',
       },
       workspacePath: '/repo',

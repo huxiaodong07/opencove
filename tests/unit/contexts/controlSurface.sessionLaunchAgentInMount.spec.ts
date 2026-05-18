@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createControlSurface } from '../../../src/app/main/controlSurface/controlSurface'
 import { registerSessionHandlers } from '../../../src/app/main/controlSurface/handlers/sessionHandlers'
@@ -259,6 +260,94 @@ describe('control surface session.launchAgentInMount', () => {
     )
     expect(spawnedInput?.args.join('\n')).toContain('stub-agent')
     expect(spawnedInput?.args.join('\n')).toContain('resume-session-123')
+  })
+
+  it('allows local mounted agent launches to use an approved fixed root outside the mount root', async () => {
+    const mountRootPath = path.join(process.cwd(), '.tmp-mounted-repo')
+    const fixedRootPath = path.join(process.cwd(), '.tmp-fixed-worktrees', 'feature-a')
+    const rootUri = pathToFileURL(mountRootPath).href
+    const fixedRootUri = pathToFileURL(fixedRootPath).href
+    const spawnSession = vi.fn(async input => {
+      expect(input.cwd).toBe(fixedRootPath)
+      return { sessionId: 'pty-mounted-fixed-root' }
+    })
+
+    resolveWorkerAgentTestStubMock.mockReturnValue({
+      command: 'node',
+      args: ['stub-agent'],
+    })
+
+    const controlSurface = createControlSurface()
+    registerSessionHandlers(controlSurface, {
+      userDataPath: '/tmp/opencove-test-user-data',
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async candidate => candidate === fixedRootPath,
+      },
+      getPersistenceStore: async () =>
+        ({
+          readAppState: async () => ({ settings: {} }),
+        }) as never,
+      ptyRuntime: {
+        spawnSession,
+        write: () => undefined,
+        resize: () => undefined,
+        kill: () => undefined,
+        onData: () => () => undefined,
+        onExit: () => () => undefined,
+        attach: () => undefined,
+        detach: () => undefined,
+        snapshot: () => '',
+        startSessionStateWatcher: () => undefined,
+        registerRemoteSession: () => 'remote-home-session',
+        dispose: () => undefined,
+      },
+      ptyStreamHub: {
+        registerSessionMetadata: () => undefined,
+        hasSession: () => false,
+      } as unknown as PtyStreamHub,
+      topology: {
+        resolveMountTarget: async () => ({
+          mountId: 'mount-local',
+          targetId: 'target-local',
+          endpointId: 'local',
+          rootPath: mountRootPath,
+          rootUri,
+        }),
+      } as never,
+    })
+
+    const launched = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'session.launchAgentInMount',
+      payload: {
+        mountId: 'mount-local',
+        cwdUri: fixedRootUri,
+        prompt: '',
+        provider: 'codex',
+        mode: 'new',
+      },
+    })
+
+    expect(launched.ok).toBe(true)
+    if (!launched.ok) {
+      return
+    }
+
+    expect(spawnSession).toHaveBeenCalledTimes(1)
+    expect(launched.value.executionContext).toMatchObject({
+      mountId: 'mount-local',
+      targetId: 'target-local',
+      workingDirectory: fixedRootPath,
+      target: {
+        rootPath: mountRootPath,
+        rootUri,
+      },
+      scope: {
+        rootPath: fixedRootPath,
+        rootUri: fixedRootUri,
+      },
+    })
   })
 
   it('captures the Gemini discovery cursor before starting the mount watcher for new launches', async () => {

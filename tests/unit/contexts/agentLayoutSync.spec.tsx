@@ -60,6 +60,145 @@ function createAgentNode(): Node<TerminalNodeData> {
 }
 
 describe('agent terminal layout sync', () => {
+  it('relaunches an existing agent node in its current fixed-root space directory', async () => {
+    const workspacePath = '/tmp/project'
+    const fixedRootPath = '/tmp/fixed-worktrees/feature-a'
+    const nodesRef = {
+      current: [createAgentNode()],
+    } as React.MutableRefObject<Node<TerminalNodeData>[]>
+    const spacesRef = {
+      current: [
+        {
+          id: 'space-1',
+          name: 'Feature',
+          directoryPath: fixedRootPath,
+          targetMountId: 'mount-1',
+          labelColor: null,
+          nodeIds: ['agent-1'],
+          rect: null,
+        },
+      ],
+    } as React.MutableRefObject<WorkspaceSpaceState[]>
+
+    const setNodes = vi.fn(
+      (
+        updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
+        _options?: { syncLayout?: boolean },
+      ) => {
+        nodesRef.current = updater(nodesRef.current)
+      },
+    )
+    const controlSurfaceInvoke = vi.fn(async (request: { id: string; payload?: unknown }) => {
+      if (request.id === 'mount.list') {
+        return {
+          projectId: 'ws1',
+          mounts: [
+            {
+              mountId: 'mount-1',
+              projectId: 'ws1',
+              name: 'Primary',
+              sortOrder: 0,
+              endpointId: 'local',
+              targetId: 'target-1',
+              rootPath: workspacePath,
+              rootUri: 'file:///tmp/project',
+              createdAt: '2026-05-10T00:00:00.000Z',
+              updatedAt: '2026-05-10T00:00:00.000Z',
+            },
+          ],
+        }
+      }
+
+      if (request.id === 'session.launchAgentInMount') {
+        return {
+          sessionId: 'agent-session-fixed-root',
+          provider: 'codex',
+          startedAt: '2026-05-10T00:00:00.000Z',
+          executionContext: {
+            projectId: null,
+            spaceId: null,
+            mountId: 'mount-1',
+            targetId: 'target-1',
+            endpoint: { endpointId: 'local', kind: 'local' },
+            target: { scheme: 'file', rootPath: workspacePath, rootUri: 'file:///tmp/project' },
+            scope: {
+              rootPath: fixedRootPath,
+              rootUri: 'file:///tmp/fixed-worktrees/feature-a',
+            },
+            workingDirectory: fixedRootPath,
+          },
+          profileId: null,
+          runtimeKind: 'posix',
+          resumeSessionId: null,
+          effectiveModel: 'gpt-5.2-codex',
+          command: 'codex',
+          args: [],
+        }
+      }
+
+      throw new Error(`Unexpected control surface request: ${request.id}`)
+    })
+
+    Object.defineProperty(window, 'opencoveApi', {
+      configurable: true,
+      writable: true,
+      value: {
+        controlSurface: {
+          invoke: controlSurfaceInvoke,
+        },
+        pty: {
+          kill: vi.fn(async () => undefined),
+        },
+        workspace: {
+          ensureDirectory: vi.fn(async () => undefined),
+        },
+      },
+    })
+
+    function Harness(): null {
+      const { launchAgentInNode } = useWorkspaceCanvasAgentNodeLifecycle({
+        workspaceId: 'ws1',
+        workspacePath,
+        nodesRef,
+        spacesRef,
+        onSpacesChange: vi.fn(),
+        setNodes,
+        bumpAgentLaunchToken: () => 1,
+        isAgentLaunchTokenCurrent: () => true,
+        agentFullAccess: true,
+        defaultTerminalProfileId: null,
+        agentEnvByProvider: DEFAULT_AGENT_ENV_BY_PROVIDER,
+        terminalFontSize: 13,
+        terminalDisplayMetrics: { fontSize: 13, lineHeight: 1, letterSpacing: 0 },
+      })
+
+      useEffect(() => {
+        void launchAgentInNode('agent-1', 'new')
+      }, [launchAgentInNode])
+
+      return null
+    }
+
+    render(<Harness />)
+
+    await waitFor(() => {
+      expect(controlSurfaceInvoke).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'session.launchAgentInMount',
+          payload: expect.objectContaining({
+            mountId: 'mount-1',
+            cwdUri: 'file:///tmp/fixed-worktrees/feature-a',
+          }),
+        }),
+      )
+    })
+
+    await waitFor(() => {
+      expect(nodesRef.current[0]?.data.agent?.executionDirectory).toBe(fixedRootPath)
+      expect(nodesRef.current[0]?.data.agent?.expectedDirectory).toBe(fixedRootPath)
+    })
+  })
+
   it('does not trigger layout sync during agent lifecycle status updates', async () => {
     const nodesRef = {
       current: [createAgentNode()],

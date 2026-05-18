@@ -81,9 +81,123 @@ function createPtyStreamHubStub() {
 }
 
 describe('control surface session streaming handlers', () => {
+  it('allows pty.spawnInMount to use an approved fixed root outside the mount root', async () => {
+    const rootPath = path.join(process.cwd(), '.tmp-mounted-repo')
+    const fixedRootPath = path.join(process.cwd(), '.tmp-fixed-worktrees', 'terminal-a')
+    const rootUri = pathToFileURL(rootPath).href
+    const fixedRootUri = pathToFileURL(fixedRootPath).href
+    let spawnedInput: { cwd: string } | null = null
+
+    const controlSurface = createControlSurface()
+    registerPtyMountHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async candidate => candidate === fixedRootPath,
+      },
+      topology: {
+        resolveMountTarget: async () => ({
+          mountId: 'mount-1',
+          endpointId: 'local',
+          targetId: 'target-1',
+          rootPath,
+          rootUri,
+        }),
+      } as never,
+      ptyRuntime: {
+        spawnSession: async input => {
+          spawnedInput = input
+          return { sessionId: 'pty-fixed-root' }
+        },
+        write: () => undefined,
+        resize: () => undefined,
+        kill: () => undefined,
+        onData: () => () => undefined,
+        onExit: () => () => undefined,
+        attach: () => undefined,
+        detach: () => undefined,
+        snapshot: () => '',
+        registerRemoteSession: () => 'remote-home-session',
+        dispose: () => undefined,
+      },
+      ptyStreamHub: {
+        registerSessionMetadata: () => undefined,
+      } as unknown as PtyStreamHub,
+    })
+
+    const spawned = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'pty.spawnInMount',
+      payload: {
+        mountId: 'mount-1',
+        cwdUri: fixedRootUri,
+        command: 'node',
+        args: ['-v'],
+      },
+    })
+
+    expect(spawned.ok).toBe(true)
+    expect(spawnedInput?.cwd).toBe(fixedRootPath)
+  })
+
+  it('rejects pty.spawnInMount when an off-mount fixed root is not approved', async () => {
+    const rootPath = path.join(process.cwd(), '.tmp-mounted-repo')
+    const fixedRootPath = path.join(process.cwd(), '.tmp-fixed-worktrees', 'terminal-b')
+    const rootUri = pathToFileURL(rootPath).href
+    const fixedRootUri = pathToFileURL(fixedRootPath).href
+
+    const controlSurface = createControlSurface()
+    registerPtyMountHandlers(controlSurface, {
+      approvedWorkspaces: {
+        registerRoot: async () => undefined,
+        isPathApproved: async () => false,
+      },
+      topology: {
+        resolveMountTarget: async () => ({
+          mountId: 'mount-1',
+          endpointId: 'local',
+          targetId: 'target-1',
+          rootPath,
+          rootUri,
+        }),
+      } as never,
+      ptyRuntime: {
+        spawnSession: async () => ({ sessionId: 'unused' }),
+        write: () => undefined,
+        resize: () => undefined,
+        kill: () => undefined,
+        onData: () => () => undefined,
+        onExit: () => () => undefined,
+        attach: () => undefined,
+        detach: () => undefined,
+        snapshot: () => '',
+        registerRemoteSession: () => 'remote-home-session',
+        dispose: () => undefined,
+      },
+      ptyStreamHub: {
+        registerSessionMetadata: () => undefined,
+      } as unknown as PtyStreamHub,
+    })
+
+    const spawned = await controlSurface.invoke(ctx, {
+      kind: 'command',
+      id: 'pty.spawnInMount',
+      payload: {
+        mountId: 'mount-1',
+        cwdUri: fixedRootUri,
+        command: 'node',
+        args: ['-v'],
+      },
+    })
+
+    expect(spawned.ok).toBe(false)
+    if (!spawned.ok) {
+      expect(spawned.error.code).toBe('common.approved_path_required')
+    }
+  })
+
   it('routes session.spawnTerminal through pty.spawnInMount for mounted spaces', async () => {
     const rootPath = path.join(process.cwd(), '.tmp-mounted-repo')
-    const worktreePath = path.join(rootPath, 'worktrees', 'feature-b')
+    const worktreePath = path.join(process.cwd(), '.tmp-fixed-worktrees', 'feature-b')
     const rootUri = pathToFileURL(rootPath).href
     const worktreeUri = pathToFileURL(worktreePath).href
     const appState = {
@@ -101,20 +215,8 @@ describe('control surface session streaming handlers', () => {
             {
               id: 's1',
               name: 'Space A',
-              directoryPath: '/repo',
+              directoryPath: worktreePath,
               targetMountId: 'mount-1',
-              boundary: {
-                allowedMountIds: ['mount-1'],
-                scopesByMountId: {
-                  'mount-1': {
-                    rootPath: worktreePath,
-                    rootUri: worktreeUri,
-                  },
-                },
-                allowedPluginIds: null,
-                capabilities: null,
-                trustLevel: null,
-              },
               labelColor: null,
               nodeIds: [],
               rect: null,

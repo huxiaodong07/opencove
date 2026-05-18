@@ -9,7 +9,6 @@ import type {
 import { TerminalProfileResolver } from '../../../../platform/terminal/TerminalProfileResolver'
 import type { ControlSurface } from '../controlSurface'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
-import { assertFileUriWithinRootUri } from '../topology/fileUriScope'
 import type { MultiEndpointPtyRuntime } from '../ptyStream/multiEndpointPtyRuntime'
 import type { PtyStreamHub } from '../ptyStream/ptyStreamHub'
 import { invokeControlSurface } from '../remote/controlSurfaceHttpClient'
@@ -188,12 +187,6 @@ export function registerPtyMountHandlers(
       }
 
       const cwdUri = payload.cwdUri ?? target.rootUri
-      assertFileUriWithinRootUri({
-        rootUri: target.rootUri,
-        uri: cwdUri,
-        debugMessage: 'pty.spawnInMount cwdUri is outside mount root',
-      })
-
       const cwd = resolvePathFromUriOrThrow(cwdUri, 'pty.spawnInMount cwdUri')
       const cols = payload.cols ?? 80
       const rows = payload.rows ?? 24

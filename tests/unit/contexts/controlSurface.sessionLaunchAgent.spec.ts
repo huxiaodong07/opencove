@@ -213,7 +213,7 @@ describe('control surface session launch agent', () => {
 
   it('routes space-based agent launches through session.launchAgentInMount when the space resolves to a mount', async () => {
     const rootPath = path.join(process.cwd(), '.tmp-mounted-repo')
-    const worktreePath = path.join(rootPath, 'worktrees', 'feature-a')
+    const worktreePath = path.join(process.cwd(), '.tmp-fixed-worktrees', 'feature-a')
     const rootUri = pathToFileURL(rootPath).href
     const appState = {
       formatVersion: 1,
@@ -326,8 +326,8 @@ describe('control surface session launch agent', () => {
         rootUri,
       },
       scope: {
-        rootPath,
-        rootUri,
+        rootPath: worktreePath,
+        rootUri: pathToFileURL(worktreePath).href,
       },
       endpoint: {
         endpointId: 'local',
