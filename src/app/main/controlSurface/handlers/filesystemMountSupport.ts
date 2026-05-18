@@ -3,7 +3,6 @@ import type { ApprovedWorkspaceStore } from '../../../../contexts/workspace/infr
 import { createAppError, OpenCoveAppError } from '../../../../shared/errors/appError'
 import type { ResolveMountTargetResult } from '../../../../shared/contracts/dto'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
-import { assertFileUriWithinRootUri } from '../topology/fileUriScope'
 import { invokeControlSurface } from '../remote/controlSurfaceHttpClient'
 
 type RemoteEndpointConnection = {
@@ -112,18 +111,6 @@ export async function resolveMountTargetOrThrow(options: {
   }
 
   return target
-}
-
-export function assertFileUriWithinMountRoot(options: {
-  target: ResolveMountTargetResult
-  uri: string
-  debugMessage: string
-}): void {
-  assertFileUriWithinRootUri({
-    rootUri: options.target.rootUri,
-    uri: options.uri,
-    debugMessage: options.debugMessage,
-  })
 }
 
 async function resolveRemoteOrThrow(

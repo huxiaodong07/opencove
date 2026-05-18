@@ -25,7 +25,6 @@ import type {
 import type { ControlSurface } from '../controlSurface'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
 import {
-  assertFileUriWithinMountRoot,
   invokeRemoteValue,
   isRecord,
   normalizeFileSystemUri,
@@ -84,12 +83,6 @@ export function registerFilesystemMountWriteHandlers(
         )
       }
 
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.writeFileTextInMount uri is outside mount root',
-      })
-
       if (target.endpointId === 'local') {
         await writeFileTextUseCase(deps.port, payload satisfies WriteFileTextInput)
         return
@@ -132,12 +125,6 @@ export function registerFilesystemMountWriteHandlers(
           'filesystem.createDirectoryInMount uri is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.createDirectoryInMount uri is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         await createDirectoryUseCase(deps.port, payload satisfies CreateDirectoryInput)
@@ -182,12 +169,6 @@ export function registerFilesystemMountWriteHandlers(
         )
       }
 
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.deleteEntryInMount uri is outside mount root',
-      })
-
       if (target.endpointId === 'local') {
         await deleteEntry(payload.uri)
         return
@@ -224,17 +205,6 @@ export function registerFilesystemMountWriteHandlers(
           'filesystem.copyEntryInMount target is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.sourceUri,
-        debugMessage: 'filesystem.copyEntryInMount source is outside mount root',
-      })
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.targetUri,
-        debugMessage: 'filesystem.copyEntryInMount target is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         await copyEntryUseCase(deps.port, payload satisfies CopyEntryInput)
@@ -275,17 +245,6 @@ export function registerFilesystemMountWriteHandlers(
           'filesystem.moveEntryInMount target is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.sourceUri,
-        debugMessage: 'filesystem.moveEntryInMount source is outside mount root',
-      })
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.targetUri,
-        debugMessage: 'filesystem.moveEntryInMount target is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         await moveEntryUseCase(deps.port, payload satisfies MoveEntryInput)
@@ -329,17 +288,6 @@ export function registerFilesystemMountWriteHandlers(
           'filesystem.renameEntryInMount target is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.sourceUri,
-        debugMessage: 'filesystem.renameEntryInMount source is outside mount root',
-      })
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.targetUri,
-        debugMessage: 'filesystem.renameEntryInMount target is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         await renameEntryUseCase(deps.port, payload satisfies RenameEntryInput)

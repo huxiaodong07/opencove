@@ -23,7 +23,6 @@ import { normalizeReadFileBytesResult } from '../../../../shared/contracts/dto/f
 import type { ControlSurface } from '../controlSurface'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
 import {
-  assertFileUriWithinMountRoot,
   invokeRemoteValue,
   isRecord,
   normalizeFileSystemUri,
@@ -65,12 +64,6 @@ export function registerFilesystemMountReadHandlers(
           'filesystem.readFileBytesInMount uri is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.readFileBytesInMount uri is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         return await readFileBytesUseCase(deps.port, payload satisfies ReadFileBytesInput)
@@ -116,12 +109,6 @@ export function registerFilesystemMountReadHandlers(
         )
       }
 
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.readFileTextInMount uri is outside mount root',
-      })
-
       if (target.endpointId === 'local') {
         return await readFileTextUseCase(deps.port, payload satisfies ReadFileTextInput)
       }
@@ -164,12 +151,6 @@ export function registerFilesystemMountReadHandlers(
         )
       }
 
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.statInMount uri is outside mount root',
-      })
-
       if (target.endpointId === 'local') {
         return await statUseCase(deps.port, payload satisfies StatInput)
       }
@@ -211,12 +192,6 @@ export function registerFilesystemMountReadHandlers(
           'filesystem.readDirectoryInMount uri is outside approved roots',
         )
       }
-
-      assertFileUriWithinMountRoot({
-        target,
-        uri: payload.uri,
-        debugMessage: 'filesystem.readDirectoryInMount uri is outside mount root',
-      })
 
       if (target.endpointId === 'local') {
         return await readDirectoryUseCase(deps.port, payload satisfies ReadDirectoryInput)

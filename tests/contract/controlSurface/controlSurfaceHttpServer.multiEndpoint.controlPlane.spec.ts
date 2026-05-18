@@ -255,16 +255,19 @@ describe('Control Surface HTTP server (multi-endpoint orchestration)', () => {
     }
   })
 
-  it('enforces mount root scope for filesystem.*InMount', async () => {
+  it('routes filesystem.*InMount to approved roots on the selected endpoint', async () => {
     const userDataPath = await mkdtemp(join(tmpdir(), 'opencove-m6-home-scope-'))
     const basePath = await mkdtemp(join(tmpdir(), 'opencove-m6-scope-root-'))
+    const unapprovedBasePath = await mkdtemp(join(tmpdir(), 'opencove-m6-unapproved-scope-'))
     const mountRootPath = resolve(basePath, 'mount')
     await mkdir(mountRootPath, { recursive: true })
 
     const inMountPath = resolve(mountRootPath, 'in.txt')
     const outsidePath = resolve(basePath, 'outside.txt')
+    const unapprovedOutsidePath = resolve(unapprovedBasePath, 'outside.txt')
     await writeFile(inMountPath, 'inside', 'utf8')
     await writeFile(outsidePath, 'outside', 'utf8')
+    await writeFile(unapprovedOutsidePath, 'unapproved', 'utf8')
 
     const connectionFileName = 'control-surface.m6.scope.test.json'
     const connectionFilePath = resolve(userDataPath, connectionFileName)
@@ -332,20 +335,29 @@ describe('Control Surface HTTP server (multi-endpoint orchestration)', () => {
       const badRes = await invoke(baseUrl, 'home-token', {
         kind: 'query',
         id: 'filesystem.readFileTextInMount',
-        payload: { mountId, uri: toFileUri(outsidePath) },
+        payload: { mountId, uri: toFileUri(unapprovedOutsidePath) },
       })
       expect(badRes.status, JSON.stringify(badRes.data)).toBe(200)
       expect(isEnvelopeErr(badRes.data)).toBe(true)
-      expect(badRes.data.error.code).toBe('common.invalid_input')
+      expect(badRes.data.error.code).toBe('common.approved_path_required')
 
       const badBytesRes = await invoke(baseUrl, 'home-token', {
         kind: 'query',
         id: 'filesystem.readFileBytesInMount',
-        payload: { mountId, uri: toFileUri(outsidePath) },
+        payload: { mountId, uri: toFileUri(unapprovedOutsidePath) },
       })
       expect(badBytesRes.status, JSON.stringify(badBytesRes.data)).toBe(200)
       expect(isEnvelopeErr(badBytesRes.data)).toBe(true)
-      expect(badBytesRes.data.error.code).toBe('common.invalid_input')
+      expect(badBytesRes.data.error.code).toBe('common.approved_path_required')
+
+      const approvedOffMountRes = await invoke(baseUrl, 'home-token', {
+        kind: 'query',
+        id: 'filesystem.readFileTextInMount',
+        payload: { mountId, uri: toFileUri(outsidePath) },
+      })
+      expect(approvedOffMountRes.status, JSON.stringify(approvedOffMountRes.data)).toBe(200)
+      expect(approvedOffMountRes.data.ok).toBe(true)
+      expect(approvedOffMountRes.data.value.content).toBe('outside')
     } finally {
       await disposeAndCleanup({
         server,
