@@ -331,4 +331,73 @@ describe('GitWorktreeService', () => {
     },
     GIT_WORKTREE_TEST_TIMEOUT_MS,
   )
+
+  it(
+    'treats retrying a new branch as idempotent when its worktree is already under the configured root',
+    async () => {
+      repoDir = await createTempRepo()
+      const canonicalRepoDir = await realpath(repoDir)
+      const worktreesRoot = join(repoDir, '.opencove', 'worktrees')
+      await mkdir(worktreesRoot, { recursive: true })
+
+      const { createGitWorktree, listGitWorktrees } =
+        await import('../../../src/contexts/worktree/infrastructure/git/GitWorktreeService')
+
+      const created = await createGitWorktree({
+        repoPath: canonicalRepoDir,
+        worktreesRoot,
+        branchMode: { kind: 'new', name: 'space-retry', startPoint: 'HEAD' },
+      })
+
+      const beforeRetry = await listGitWorktrees({ repoPath: canonicalRepoDir })
+
+      const retried = await createGitWorktree({
+        repoPath: canonicalRepoDir,
+        worktreesRoot,
+        branchMode: { kind: 'new', name: 'space-retry', startPoint: 'HEAD' },
+      })
+
+      expect(retried).toEqual(
+        expect.objectContaining({
+          path: created.path,
+          branch: 'space-retry',
+        }),
+      )
+
+      const afterRetry = await listGitWorktrees({ repoPath: canonicalRepoDir })
+      expect(afterRetry.worktrees.length).toBe(beforeRetry.worktrees.length)
+      expect(afterRetry.worktrees.filter(entry => entry.branch === 'space-retry')).toHaveLength(1)
+    },
+    GIT_WORKTREE_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'does not reuse a checked-out new branch from a different worktrees root',
+    async () => {
+      repoDir = await createTempRepo()
+      const canonicalRepoDir = await realpath(repoDir)
+      const firstRoot = join(repoDir, '.opencove', 'worktrees')
+      const secondRoot = join(repoDir, 'fixed', 'worktrees')
+      await mkdir(firstRoot, { recursive: true })
+      await mkdir(secondRoot, { recursive: true })
+
+      const { createGitWorktree } =
+        await import('../../../src/contexts/worktree/infrastructure/git/GitWorktreeService')
+
+      const created = await createGitWorktree({
+        repoPath: canonicalRepoDir,
+        worktreesRoot: firstRoot,
+        branchMode: { kind: 'new', name: 'space-off-root', startPoint: 'HEAD' },
+      })
+
+      await expect(
+        createGitWorktree({
+          repoPath: canonicalRepoDir,
+          worktreesRoot: secondRoot,
+          branchMode: { kind: 'new', name: 'space-off-root', startPoint: 'HEAD' },
+        }),
+      ).rejects.toThrow(`Branch "space-off-root" is already checked out at ${created.path}`)
+    },
+    GIT_WORKTREE_TEST_TIMEOUT_MS,
+  )
 })

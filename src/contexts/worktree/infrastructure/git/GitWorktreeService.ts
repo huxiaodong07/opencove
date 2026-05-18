@@ -6,7 +6,7 @@ import {
   toCanonicalPathEvenIfMissing,
 } from './GitWorktreeService.shared'
 import { mkdir, readdir, stat } from 'node:fs/promises'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { createAppError, createAppErrorDescriptor } from '../../../../shared/errors/appError'
 import {
   cleanupResidualWorktreeDirectory,
@@ -260,6 +260,16 @@ async function allocateWorktreePath({
   throw new Error('Unable to allocate a unique worktree directory')
 }
 
+function isWorktreePathUnderRoot(worktreesRoot: string, worktreePath: string): boolean {
+  const relativePath = relative(worktreesRoot, worktreePath)
+  return (
+    relativePath.length > 0 &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${sep}`) &&
+    !isAbsolute(relativePath)
+  )
+}
+
 export async function createGitWorktree(input: CreateGitWorktreeInput): Promise<GitWorktreeEntry> {
   const normalizedRepoPath = input.repoPath.trim()
   const normalizedWorktreesRoot = input.worktreesRoot.trim()
@@ -284,6 +294,7 @@ export async function createGitWorktree(input: CreateGitWorktreeInput): Promise<
   await ensureGitRepoHasCommits(normalizedRepoPath)
 
   const worktreesSnapshot = await listGitWorktrees({ repoPath: normalizedRepoPath })
+  const canonicalWorktreesRoot = await toCanonicalPathEvenIfMissing(normalizedWorktreesRoot)
 
   const branchName = input.branchMode.name.trim()
   if (branchName.length === 0) {
@@ -291,6 +302,18 @@ export async function createGitWorktree(input: CreateGitWorktreeInput): Promise<
   }
 
   await assertValidGitBranchName(normalizedRepoPath, branchName, 'Branch name')
+
+  const alreadyCheckedOut = worktreesSnapshot.worktrees.find(entry => entry.branch === branchName)
+  if (alreadyCheckedOut) {
+    if (
+      input.branchMode.kind === 'existing' ||
+      isWorktreePathUnderRoot(canonicalWorktreesRoot, alreadyCheckedOut.path)
+    ) {
+      return alreadyCheckedOut
+    }
+
+    throw new Error(`Branch "${branchName}" is already checked out at ${alreadyCheckedOut.path}`)
+  }
 
   const branchesSnapshot = await listGitBranches({ repoPath: normalizedRepoPath })
   const branchExists = branchesSnapshot.branches.includes(branchName)
@@ -300,15 +323,6 @@ export async function createGitWorktree(input: CreateGitWorktreeInput): Promise<
 
   if (input.branchMode.kind === 'existing' && !branchExists) {
     throw new Error(`Branch "${branchName}" does not exist`)
-  }
-
-  const alreadyCheckedOut = worktreesSnapshot.worktrees.find(entry => entry.branch === branchName)
-  if (alreadyCheckedOut) {
-    if (input.branchMode.kind === 'existing') {
-      return alreadyCheckedOut
-    }
-
-    throw new Error(`Branch "${branchName}" is already checked out at ${alreadyCheckedOut.path}`)
   }
 
   await mkdir(normalizedWorktreesRoot, { recursive: true })
