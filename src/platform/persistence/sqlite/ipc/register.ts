@@ -102,7 +102,7 @@ export function registerPersistenceIpcHandlers(
   registerHandledIpc(
     IPC_CHANNELS.persistenceWriteAppState,
     async (_event, payload: unknown): Promise<PersistWriteResult> => {
-      let normalized: { state: unknown }
+      let normalized: { state: unknown; allowEmptyWorkspaceOverwrite?: boolean | null }
 
       try {
         normalized = normalizeWriteAppStatePayload(payload)
@@ -125,7 +125,9 @@ export function registerPersistenceIpcHandlers(
         }
 
         const store = await getStore()
-        const result = await store.writeAppState(normalized.state)
+        const result = await store.writeAppState(normalized.state, {
+          allowEmptyWorkspaceOverwrite: normalized.allowEmptyWorkspaceOverwrite === true,
+        })
         if (result.ok) {
           await options.onAppStateWritten?.(normalized.state)
         }

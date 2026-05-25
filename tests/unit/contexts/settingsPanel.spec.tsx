@@ -9,6 +9,7 @@ import {
 import type { AppUpdateState } from '../../../src/shared/contracts/dto'
 import * as terminalProfilesHook from '../../../src/app/renderer/shell/hooks/useTerminalProfiles'
 import { SettingsPanel } from '../../../src/contexts/settings/presentation/renderer/SettingsPanel'
+import { installSettingsPanelWorkerApi } from './settingsPanelWorkerApiTestUtils'
 
 function createModelCatalog() {
   return AGENT_PROVIDERS.reduce<
@@ -129,9 +130,11 @@ describe('SettingsPanel', () => {
     })
   })
 
-  it('exposes terminal display consistency controls in general settings', () => {
+  it('exposes terminal display consistency controls in display settings', () => {
     mockTerminalProfiles()
     renderSettingsPanel()
+
+    fireEvent.click(screen.getByTestId('settings-section-nav-appearance'))
 
     expect(screen.getByText('Terminal Display Consistency')).toBeVisible()
     expect(screen.getByText('Set Reference Automatically')).toBeVisible()
@@ -160,8 +163,21 @@ describe('SettingsPanel', () => {
     })
   })
 
-  it('persists agent executable overrides from the settings panel', async () => {
+  it('sets the default agent from the agent list', () => {
     const onChange = vi.fn()
+    mockTerminalProfiles()
+    renderSettingsPanel({ onChange })
+
+    fireEvent.click(screen.getByTestId('settings-section-nav-agent'))
+    fireEvent.click(screen.getByTestId('settings-default-provider-gemini'))
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_AGENT_SETTINGS,
+      defaultProvider: 'gemini',
+    })
+  })
+
+  it('checks agent executable availability without exposing manual path input', async () => {
     const listInstalledProviders = vi.fn(async () => ({
       providers: ['codex'],
       availabilityByProvider: {
@@ -208,24 +224,21 @@ describe('SettingsPanel', () => {
     } as Window['opencoveApi']
 
     mockTerminalProfiles()
-    renderSettingsPanel({ onChange })
+    renderSettingsPanel()
 
     fireEvent.click(screen.getByTestId('settings-section-nav-agent'))
-    fireEvent.change(screen.getByTestId('settings-agent-executable-override-codex'), {
-      target: { value: '/opt/codex/bin/codex' },
+
+    await waitFor(() => {
+      expect(listInstalledProviders).toHaveBeenCalledWith({
+        executablePathOverrideByProvider:
+          DEFAULT_AGENT_SETTINGS.agentExecutablePathOverrideByProvider,
+      })
     })
 
-    expect(listInstalledProviders).toHaveBeenCalledWith({
-      executablePathOverrideByProvider:
-        DEFAULT_AGENT_SETTINGS.agentExecutablePathOverrideByProvider,
-    })
-    expect(onChange).toHaveBeenCalledWith({
-      ...DEFAULT_AGENT_SETTINGS,
-      agentExecutablePathOverrideByProvider: {
-        ...DEFAULT_AGENT_SETTINGS.agentExecutablePathOverrideByProvider,
-        codex: '/opt/codex/bin/codex',
-      },
-    })
+    expect(screen.queryByTestId('settings-agent-executable-override-codex')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-agent-executable-install-codex')).toHaveTextContent(
+      'Installed',
+    )
   })
 
   it('updates the standard window size bucket from canvas settings', () => {
@@ -322,12 +335,13 @@ describe('SettingsPanel', () => {
     expect(onDownloadUpdate).toHaveBeenCalledTimes(1)
   })
 
-  it('toggles experimental remote workers from experimental settings', () => {
+  it('toggles remote workers from Worker & Connections settings', () => {
     const onChange = vi.fn()
     mockTerminalProfiles()
+    installSettingsPanelWorkerApi()
     renderSettingsPanel({ onChange })
 
-    fireEvent.click(screen.getByTestId('settings-section-nav-experimental'))
+    fireEvent.click(screen.getByTestId('settings-section-nav-worker'))
     fireEvent.click(screen.getByTestId('settings-experimental-remote-workers-enabled'))
 
     expect(onChange).toHaveBeenCalledWith({

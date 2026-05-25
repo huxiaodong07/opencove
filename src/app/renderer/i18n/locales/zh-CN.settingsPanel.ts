@@ -1,6 +1,7 @@
 import { zhCNTerminalDisplayCalibration } from './zh-CN.terminalDisplayCalibration'
 import { zhCNSettingsPanelDiagnostics } from './zh-CN.settingsPanel.diagnostics'
 import { zhCNSettingsPanelEndpoints } from './zh-CN.settingsPanel.endpoints'
+import { zhCNSettingsPanelLayout } from './zh-CN.settingsPanel.layout'
 import { zhCNWorkspaceCanvasNavigationShortcutCommands } from './zh-CN.settingsPanel.shortcuts.workspaceCanvasNavigation'
 
 export const zhCNSettingsPanel = {
@@ -10,23 +11,7 @@ export const zhCNSettingsPanel = {
     placeholder: '搜索',
     noResults: '未找到匹配的设置',
   },
-  nav: {
-    general: '通用',
-    worker: 'Worker',
-    endpoints: '远程 Worker',
-    agent: 'Agent',
-    notifications: '通知',
-    canvas: '画布',
-    experimental: '实验性',
-    shortcuts: '快捷键',
-    quickMenu: '快捷菜单',
-    tasks: '任务',
-    models: '模型',
-    integrations: '集成',
-    diagnostics: '诊断',
-    projects: '项目',
-    sectionsLabel: '设置分区',
-  },
+  nav: zhCNSettingsPanelLayout.nav,
   general: {
     title: '通用',
     languageLabel: '界面语言',
@@ -85,12 +70,21 @@ export const zhCNSettingsPanel = {
       },
     },
   },
+  appearance: zhCNSettingsPanelLayout.appearance,
+  terminal: zhCNSettingsPanelLayout.terminal,
   agent: {
     title: 'Agent',
     defaultAgentLabel: '默认 Agent',
     defaultAgentHelp: '新任务和终端默认使用的 AI 提供方。',
+    agentListLabel: 'Agents',
     agentProviderOrderLabel: 'Agent 菜单排序',
-    agentProviderOrderHelp: '控制菜单中 Agent 的显示顺序。',
+    agentProviderOrderHelp: '在一个列表里设置默认 Agent、排序、安装状态、模型和启动环境。',
+    defaultBadge: '默认',
+    configure: '配置',
+    done: '完成',
+    envSummary_one: '{{count}} 个环境变量',
+    envSummary_other: '{{count}} 个环境变量',
+    envSummaryNone: '无环境变量',
     moveUp: '上移',
     moveDown: '下移',
     fullAccessLabel: '完全访问模式',
@@ -105,18 +99,15 @@ export const zhCNSettingsPanel = {
     valuePlaceholder: 'value',
   },
   agentExecutable: {
-    title: 'Agent 可执行文件解析',
-    help: '查看每个本地 Agent CLI 的宿主侧诊断。Agent 启动会使用所选终端配置，因此宿主探测不可用不一定代表无法启动。',
-    overrideLabel: '可执行文件覆盖路径',
-    overrideHelp: '可选的本地路径覆盖。一旦设置，OpenCove 会要求该路径必须可成功解析。',
-    overridePlaceholder: '/absolute/path/to/executable',
-    pathLabel: '当前解析路径',
-    notResolved: '未解析',
-    commandLabel: '命令：{{command}}',
+    title: 'Agent 安装状态',
+    help: '检查本地 Agent CLI；未安装时可通过 npm 一键安装。Agent 启动仍使用所选终端配置。',
+    install: '安装',
+    installUnavailable: '安装功能仅在桌面应用中可用。',
     status: {
-      available: '可用',
-      unavailable: '不可用',
+      available: '已安装',
+      unavailable: '未安装',
       misconfigured: '配置错误',
+      installing: '安装中',
     },
   },
   quickMenu: {
@@ -227,6 +218,7 @@ export const zhCNSettingsPanel = {
   },
   experimental: {
     title: '实验性',
+    help: '低频且仍在演进的能力。没有明确需要时建议保持默认。',
     remoteWorkersTitle: '远程 Worker 与位置',
     remoteWorkersHelp:
       '远程 Worker 与远程项目位置（mount）的实验性支持。在工作流稳定前建议保持关闭。',
@@ -295,6 +287,7 @@ export const zhCNSettingsPanel = {
     websiteWindowKeepAliveHostsHelp: '匹配的 host 不会被回收（例如 slack.com、*.figma.com）。',
     websiteWindowKeepAliveHostsPlaceholder: '添加 host pattern（例如 *.figma.com）',
   },
+  workerConnections: zhCNSettingsPanelLayout.workerConnections,
   shortcuts: {
     title: '快捷键',
     disableWhenTerminalFocusedLabel: '终端聚焦时禁用快捷键',
@@ -410,7 +403,7 @@ export const zhCNSettingsPanel = {
     errors: {
       remoteRequired: '远程 Worker 需要填写主机、端口和 Token。',
       remoteExperimentalDisabled:
-        '远程 Worker 为实验性功能。请先在「实验性」设置中启用远程 Worker 后再继续。',
+        '远程 Worker 为实验性功能。请先在「Worker 与连接」中启用远程 Worker 后再继续。',
       stopLocalWorkerFirst: '切换到 Standalone 前请先停止本机 Worker。',
       enableLocalRequiresRestart: '请先启用本机 Worker 模式并重启，然后再启动 Worker。',
     },
@@ -452,7 +445,7 @@ export const zhCNSettingsPanel = {
     },
     local: {
       title: '本机 Worker 状态',
-      help: '默认仅监听 127.0.0.1，并要求 token。远程访问建议使用 SSH tunnel。Worker Web UI 为实验性功能（见“实验性”设置）。',
+      help: '默认仅监听 127.0.0.1，并要求 token。远程访问建议使用 SSH tunnel。Worker Web UI 位于「Worker 与连接」。',
       statusLabel: '状态',
       status: {
         running: '运行中',

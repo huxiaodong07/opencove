@@ -74,7 +74,9 @@ describe('persistence IPC app state write hooks', () => {
       writeResult,
     )
 
-    expect(store.writeAppState).toHaveBeenCalledWith(state)
+    expect(store.writeAppState).toHaveBeenCalledWith(state, {
+      allowEmptyWorkspaceOverwrite: false,
+    })
     expect(onAppStateWritten).toHaveBeenCalledWith(state)
     expect(store.writeAppState.mock.invocationCallOrder[0]).toBeLessThan(
       onAppStateWritten.mock.invocationCallOrder[0],

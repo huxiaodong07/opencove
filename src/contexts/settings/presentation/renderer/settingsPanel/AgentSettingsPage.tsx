@@ -1,10 +1,10 @@
-import React from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from '@app/renderer/i18n'
+import { toErrorMessage } from './workerSectionUtils'
 import type { AgentSettings } from '@contexts/settings/domain/agentSettings'
 import type { AgentProvider } from '@contexts/settings/domain/agentSettings'
+import type { AgentProviderAvailability } from '@shared/contracts/dto'
 import { AgentSection } from './AgentSection'
-import { ModelOverrideSection } from './ModelOverrideSection'
-import { AgentEnvSection } from './AgentEnvSection'
-import { AgentExecutableSection } from './AgentExecutableSection'
 
 interface ModelCatalogEntry {
   models: string[]
@@ -27,7 +27,6 @@ export function AgentSettingsPage({
   onChangeAddModelInput,
   onAddCustomModelOption,
   onChangeAgentEnvByProvider,
-  onChangeAgentExecutablePathOverrideByProvider,
 }: {
   settings: AgentSettings
   modelCatalogByProvider: Record<AgentProvider, ModelCatalogEntry>
@@ -41,41 +40,105 @@ export function AgentSettingsPage({
   onChangeAddModelInput: (provider: AgentProvider, value: string) => void
   onAddCustomModelOption: (provider: AgentProvider) => void
   onChangeAgentEnvByProvider: (agentEnvByProvider: AgentSettings['agentEnvByProvider']) => void
-  onChangeAgentExecutablePathOverrideByProvider: (
-    agentExecutablePathOverrideByProvider: AgentSettings['agentExecutablePathOverrideByProvider'],
-  ) => void
 }): React.JSX.Element {
+  const { t } = useTranslation()
+  const [availabilityByProvider, setAvailabilityByProvider] = useState<
+    Record<string, AgentProviderAvailability>
+  >({})
+  const [isRefreshingAvailability, setIsRefreshingAvailability] = useState(false)
+  const [installingProvider, setInstallingProvider] = useState<AgentProvider | null>(null)
+  const [installErrorByProvider, setInstallErrorByProvider] = useState<Record<string, string>>({})
+
+  const refreshAvailability = useCallback(() => {
+    const listInstalledProviders = window.opencoveApi?.agent?.listInstalledProviders
+    if (typeof listInstalledProviders !== 'function') {
+      setAvailabilityByProvider({})
+      setIsRefreshingAvailability(false)
+      return
+    }
+
+    setIsRefreshingAvailability(true)
+
+    listInstalledProviders({
+      executablePathOverrideByProvider: settings.agentExecutablePathOverrideByProvider,
+    })
+      .then(result => {
+        setAvailabilityByProvider(result.availabilityByProvider)
+      })
+      .catch(() => {
+        setAvailabilityByProvider({})
+      })
+      .finally(() => {
+        setIsRefreshingAvailability(false)
+      })
+  }, [settings.agentExecutablePathOverrideByProvider])
+
+  useEffect(() => {
+    refreshAvailability()
+  }, [refreshAvailability])
+
+  const installProvider = useCallback(
+    async (provider: AgentProvider): Promise<void> => {
+      const install = window.opencoveApi?.agent?.installProvider
+      if (typeof install !== 'function') {
+        setInstallErrorByProvider(previous => ({
+          ...previous,
+          [provider]: t('settingsPanel.agentExecutable.installUnavailable'),
+        }))
+        return
+      }
+
+      setInstallingProvider(provider)
+      setInstallErrorByProvider(previous => {
+        const next = { ...previous }
+        delete next[provider]
+        return next
+      })
+
+      try {
+        const result = await install({ provider })
+        setAvailabilityByProvider(previous => ({
+          ...previous,
+          [provider]: result.availability,
+        }))
+        refreshAvailability()
+      } catch (caughtError) {
+        setInstallErrorByProvider(previous => ({
+          ...previous,
+          [provider]: toErrorMessage(caughtError),
+        }))
+      } finally {
+        setInstallingProvider(current => (current === provider ? null : current))
+      }
+    },
+    [refreshAvailability, t],
+  )
+
   return (
     <>
       <AgentSection
         defaultProvider={settings.defaultProvider}
         agentProviderOrder={settings.agentProviderOrder}
         agentFullAccess={settings.agentFullAccess}
-        onChangeDefaultProvider={onChangeDefaultProvider}
-        onChangeAgentProviderOrder={onChangeAgentProviderOrder}
-        onChangeAgentFullAccess={onChangeAgentFullAccess}
-      />
-      <ModelOverrideSection
+        availabilityByProvider={availabilityByProvider}
+        installingProvider={installingProvider}
+        installErrorByProvider={installErrorByProvider}
+        isRefreshingAvailability={isRefreshingAvailability}
         settings={settings}
         modelCatalogByProvider={modelCatalogByProvider}
         addModelInputByProvider={addModelInputByProvider}
+        onChangeDefaultProvider={onChangeDefaultProvider}
+        onChangeAgentProviderOrder={onChangeAgentProviderOrder}
+        onChangeAgentFullAccess={onChangeAgentFullAccess}
         onToggleCustomModelEnabled={onToggleCustomModelEnabled}
         onSelectProviderModel={onSelectProviderModel}
         onRemoveCustomModelOption={onRemoveCustomModelOption}
         onChangeAddModelInput={onChangeAddModelInput}
         onAddCustomModelOption={onAddCustomModelOption}
-      />
-      <AgentEnvSection
-        agentProviderOrder={settings.agentProviderOrder}
-        agentEnvByProvider={settings.agentEnvByProvider}
         onChangeAgentEnvByProvider={onChangeAgentEnvByProvider}
-      />
-      <AgentExecutableSection
-        agentProviderOrder={settings.agentProviderOrder}
-        agentExecutablePathOverrideByProvider={settings.agentExecutablePathOverrideByProvider}
-        onChangeAgentExecutablePathOverrideByProvider={
-          onChangeAgentExecutablePathOverrideByProvider
-        }
+        onInstallProvider={provider => {
+          void installProvider(provider)
+        }}
       />
     </>
   )

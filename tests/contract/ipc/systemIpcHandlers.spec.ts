@@ -150,7 +150,7 @@ describe('system IPC handlers', () => {
         properties: ['createDirectory', 'showOverwriteConfirmation'],
       }),
     )
-    expect(mkdir).toHaveBeenCalledWith('/tmp/opencove-downloads', { recursive: true })
+    expect(mkdir).toHaveBeenCalledWith(path.dirname(selectedPath), { recursive: true })
     expect(writeFile).toHaveBeenCalledWith(selectedPath, 'hello', { encoding: 'utf8' })
   })
 

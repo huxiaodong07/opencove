@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### 🚀 Added
+- Agent: add Settings install status for local agent CLIs with one-click npm install actions and a unified default/order/install list. (#267)
 - Release: add separate macOS Intel x64 release artifacts alongside Apple Silicon packages. (#255)
 - Workspace canvas: add full browser-window capability with client-local history, bookmarks, Safari-style start page, Settings-owned full-browser/web-compatible viewer modes, configurable search engine, downloads, permissions, find, fullscreen, four-terminal default sizing, 90% normal-window constraints, and WebUI web-compatible viewer support. (#246)
 - Document editor: add VS Code-style shortcut handling for word wrap (`Alt/Option+Z`) and editor-local find (`Cmd/Ctrl+F`) inside Monaco document nodes. (#244)
@@ -51,6 +52,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - CLI: Local Worker lifecycle controls with `worker status --all` and ownership-safe `worker stop`. (#195)
 
 ### 💅 Changed
+- Settings: reorganize the panel into user-oriented groups for display/fonts, canvas/windows, AI assistants, tasks/shortcuts, worker connections, integrations, and advanced tools while preserving search and legacy section routing. (#266)
+- Worker: Desktop now versions local-worker reuse and repairs legacy connection files before reconnecting, preventing installed upgrades from reusing stale runtimes and bypassing persistence repair. (#264)
+- Support: expand in-app issue reports into structured redacted diagnostic bundles with runtime state, process snapshots, and log excerpts. (#262)
 - Workspace canvas: simplify Space creation and scoped lifecycle operations so the same `Create Space` action creates child Spaces inside existing Spaces, child Spaces can become Space Worktrees under the ancestor-chain guard, and archive cleanup is explicit for contained Worktrees. (#257)
 - Workspace canvas: note markdown export now defaults to Downloads, confirms the save location on Desktop, supports WebUI browser downloads, and reports completion through the app message toast instead of inline note status text. (#253)
 - Space Explorer: now opens at half the canonical agent window width by default, uses flatter VS Code-style selection chrome, and creates new files/folders inline in the tree with preserved selection. (#232)
@@ -82,6 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Spaces: allow empty Spaces (no last-node warning/auto-close), add pane context menu action to create an empty Space, and allow archiving a Space without saving its history. (#171)
 
 ### 🐞 Fixed
+- Persistence: reject accidental empty workspace overwrites unless the caller explicitly opts in, preventing sync/restart from clearing durable workspace state. (#265)
 - Persistence: harden installed upgrade repair, block stale local Worker reuse across app-version changes, and document rollback as unsupported unless explicitly tested. (#261)
 - Worker/PTY: shutdown-time IPC disconnects no longer crash the process with unhandled `EPIPE` / closed-channel errors. (#260)
 - Remote: fix Managed SSH localhost-to-WSL startup by preserving OpenSSH argument ordering, allocating dedicated worker ports, and waiting for the remote worker to become ready before marking the endpoint connected. (#259)
