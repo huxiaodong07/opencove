@@ -83,6 +83,45 @@ describe('persistence IPC app state write hooks', () => {
     )
   })
 
+  it('preserves explicit empty-workspace overwrite approval before running the write hook', async () => {
+    const { handlers, ipcMain } = createIpcHarness()
+    vi.doMock('electron', () => ({ ipcMain }))
+
+    const writeResult: PersistWriteResult = { ok: true, level: 'full', bytes: 12 }
+    const store = createPersistenceStoreStub(writeResult)
+    const onAppStateWritten = vi.fn(async (_state: unknown) => undefined)
+
+    const { registerPersistenceIpcHandlers } =
+      await import('../../../src/platform/persistence/sqlite/ipc/register')
+
+    registerPersistenceIpcHandlers(async () => store, { onAppStateWritten })
+
+    const handler = handlers.get(IPC_CHANNELS.persistenceWriteAppState)
+    expect(handler).toBeTypeOf('function')
+
+    const state = {
+      formatVersion: 1,
+      activeWorkspaceId: null,
+      workspaces: [],
+      settings: {},
+    }
+
+    await expect(
+      invokeHandledIpc<PersistWriteResult>(handler, null, {
+        state,
+        allowEmptyWorkspaceOverwrite: true,
+      }),
+    ).resolves.toEqual(writeResult)
+
+    expect(store.writeAppState).toHaveBeenCalledWith(state, {
+      allowEmptyWorkspaceOverwrite: true,
+    })
+    expect(onAppStateWritten).toHaveBeenCalledWith(state)
+    expect(store.writeAppState.mock.invocationCallOrder[0]).toBeLessThan(
+      onAppStateWritten.mock.invocationCallOrder[0],
+    )
+  })
+
   it('skips the app state written hook when the write fails', async () => {
     const { handlers, ipcMain } = createIpcHarness()
     vi.doMock('electron', () => ({ ipcMain }))

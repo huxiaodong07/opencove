@@ -65,6 +65,29 @@ describe('WorkspaceSection', () => {
     )
   })
 
+  it('shows a Windows absolute worktree root as a fixed resolved path', () => {
+    render(
+      <WorkspaceSection
+        workspaceName="Demo Project"
+        workspacePath={'F:\\repo\\demo'}
+        worktreesRoot={'C:\\Users\\tester\\.opencove\\worktrees'}
+        onChangeWorktreesRoot={() => undefined}
+        pullRequestBaseBranchOptions={[]}
+        onChangePullRequestBaseBranchOptions={() => undefined}
+        environmentVariables={{}}
+        onChangeEnvironmentVariables={() => undefined}
+      />,
+    )
+
+    expect(screen.getByTestId('settings-resolved-worktree-path-display')).toHaveTextContent(
+      'C:\\Users\\tester\\.opencove\\worktrees',
+    )
+    expect(screen.getByTestId('settings-resolved-worktree-path-display')).toHaveAttribute(
+      'title',
+      'C:\\Users\\tester\\.opencove\\worktrees',
+    )
+  })
+
   it('shows guidance when no project is selected', () => {
     render(
       <WorkspaceSection
