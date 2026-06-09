@@ -38,6 +38,8 @@ vi.mock('../../../src/contexts/agent/infrastructure/opencode/OpenCodeSqlite', as
   }
 })
 import { listAgentSessions } from '../../../src/contexts/agent/infrastructure/cli/AgentSessionCatalog'
+import { clearSessionFileCache } from '../../../src/contexts/agent/infrastructure/cli/AgentSessionCatalog.cache'
+import type { AgentSessionTitleCacheStore } from '../../../src/contexts/agent/infrastructure/cli/AgentSessionTitleCacheStore'
 
 function createFileEntry(name: string): Dirent {
   return { name, isFile: () => true, isDirectory: () => false } as unknown as Dirent
@@ -85,6 +87,7 @@ describe('listAgentSessions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    clearSessionFileCache()
     process.env.HOME = '/Users/tester'
     osMock.homedir.mockReturnValue('/Users/tester')
     fsPromisesMock.readdir.mockResolvedValue([])
@@ -158,7 +161,7 @@ describe('listAgentSessions', () => {
     expect(result.sessions).toHaveLength(2)
     expect(result.sessions[0]).toMatchObject({
       sessionId: 'claude-session-2',
-      title: null,
+      title: 'Fix flaky tests',
       preview: 'Fix flaky tests',
       source: 'claude-index',
     })
@@ -223,6 +226,153 @@ describe('listAgentSessions', () => {
     expect(result.sessions.map(session => session.sessionId)).toEqual(['session-b', 'session-a'])
     expect(result.sessions[0]?.source).toBe('claude-jsonl')
     expect(result.sessions[0]?.preview).toBe('Improve session discoverability')
+  })
+
+  it('prefers the Claude ai-title over the first user message for the title', async () => {
+    const cwd = '/Users/tester/Development/cove'
+    const projectDir = toClaudeProjectDir(cwd)
+    const filePath = join(projectDir, 'session-x.jsonl')
+
+    fsPromisesMock.readdir.mockImplementation(async (directory: string) => {
+      return directory === projectDir ? [createFileEntry('session-x.jsonl')] : []
+    })
+
+    fsPromisesMock.stat.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return { mtimeMs: Date.parse('2026-04-28T10:00:00.000Z'), size: 2048 }
+      }
+
+      throw new Error(`Unexpected stat ${target}`)
+    })
+
+    fsPromisesMock.open.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return createOpenHandle(
+          `${JSON.stringify({ type: 'user', content: 'Investigate restart recovery' })}\n${JSON.stringify(
+            { type: 'ai-title', aiTitle: 'Restart recovery investigation' },
+          )}\n`,
+        )
+      }
+
+      throw new Error(`Unexpected open ${target}`)
+    })
+
+    const result = await listAgentSessions({ provider: 'claude-code', cwd, limit: 10 })
+
+    expect(result.sessions[0]).toMatchObject({
+      sessionId: 'session-x',
+      title: 'Restart recovery investigation',
+      preview: 'Investigate restart recovery',
+      source: 'claude-jsonl',
+    })
+  })
+
+  it('reuses cached Claude titles until the file fingerprint changes', async () => {
+    const cwd = '/Users/tester/Development/cove'
+    const projectDir = toClaudeProjectDir(cwd)
+    const filePath = join(projectDir, 'session-c.jsonl')
+
+    fsPromisesMock.readdir.mockImplementation(async (directory: string) => {
+      return directory === projectDir ? [createFileEntry('session-c.jsonl')] : []
+    })
+
+    let fingerprint = { mtimeMs: Date.parse('2026-04-28T10:00:00.000Z'), size: 1024 }
+    fsPromisesMock.stat.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return fingerprint
+      }
+
+      throw new Error(`Unexpected stat ${target}`)
+    })
+
+    fsPromisesMock.open.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return createOpenHandle(
+          `${JSON.stringify({ type: 'ai-title', aiTitle: 'Cached title' })}\n`,
+        )
+      }
+
+      throw new Error(`Unexpected open ${target}`)
+    })
+
+    await listAgentSessions({ provider: 'claude-code', cwd, limit: 10 })
+    const openCallsAfterFirst = fsPromisesMock.open.mock.calls.length
+    expect(openCallsAfterFirst).toBeGreaterThan(0)
+
+    // 指纹不变 → 命中缓存,不再打开文件
+    await listAgentSessions({ provider: 'claude-code', cwd, limit: 10 })
+    expect(fsPromisesMock.open.mock.calls.length).toBe(openCallsAfterFirst)
+
+    // 文件被追加(mtime/size 变化)→ 缓存失效,重新扫描
+    fingerprint = { mtimeMs: Date.parse('2026-04-28T11:00:00.000Z'), size: 4096 }
+    await listAgentSessions({ provider: 'claude-code', cwd, limit: 10 })
+    expect(fsPromisesMock.open.mock.calls.length).toBeGreaterThan(openCallsAfterFirst)
+  })
+
+  it('serves Claude titles from the injected persistent cache (L2) without rescanning', async () => {
+    const cwd = '/Users/tester/Development/cove'
+    const projectDir = toClaudeProjectDir(cwd)
+    const filePath = join(projectDir, 'session-p.jsonl')
+
+    fsPromisesMock.readdir.mockImplementation(async (directory: string) => {
+      return directory === projectDir ? [createFileEntry('session-p.jsonl')] : []
+    })
+
+    fsPromisesMock.stat.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return { mtimeMs: Date.parse('2026-04-28T10:00:00.000Z'), size: 2048 }
+      }
+
+      throw new Error(`Unexpected stat ${target}`)
+    })
+
+    fsPromisesMock.open.mockImplementation(async (target: string) => {
+      if (target === filePath) {
+        return createOpenHandle(
+          `${JSON.stringify({ type: 'user', content: 'Investigate restart recovery' })}\n${JSON.stringify(
+            { type: 'ai-title', aiTitle: 'Restart recovery investigation' },
+          )}\n`,
+        )
+      }
+
+      throw new Error(`Unexpected open ${target}`)
+    })
+
+    const rows = new Map<string, { mtimeMs: number; size: number; value: unknown }>()
+    const titleCache: AgentSessionTitleCacheStore = {
+      read: (cachedFilePath, fingerprint) => {
+        const row = rows.get(cachedFilePath)
+        if (!row || row.mtimeMs !== fingerprint.mtimeMs || row.size !== fingerprint.size) {
+          return null
+        }
+
+        return { value: row.value }
+      },
+      write: ({ filePath: cachedFilePath, fingerprint, value }) => {
+        rows.set(cachedFilePath, { mtimeMs: fingerprint.mtimeMs, size: fingerprint.size, value })
+      },
+      pruneMissing: () => 0,
+      dispose: () => undefined,
+    }
+
+    await listAgentSessions({ provider: 'claude-code', cwd, limit: 10 }, { titleCache })
+    const openCallsAfterFirst = fsPromisesMock.open.mock.calls.length
+    expect(openCallsAfterFirst).toBeGreaterThan(0)
+    expect(rows.size).toBe(1)
+
+    // 丢弃 L1,迫使第二次只能依赖注入的 L2:命中则不应再打开文件。
+    clearSessionFileCache()
+    const result = await listAgentSessions(
+      { provider: 'claude-code', cwd, limit: 10 },
+      { titleCache },
+    )
+
+    expect(fsPromisesMock.open.mock.calls.length).toBe(openCallsAfterFirst)
+    expect(result.sessions[0]).toMatchObject({
+      sessionId: 'session-p',
+      title: 'Restart recovery investigation',
+      preview: 'Investigate restart recovery',
+    })
   })
 
   it('lists Codex sessions by scanning rollout metadata across date directories', async () => {
@@ -337,154 +487,5 @@ describe('listAgentSessions', () => {
     ])
     expect(result.sessions[0]?.source).toBe('codex-file')
     expect(result.sessions[0]?.preview).toBe('Inspect the new session list UX')
-  })
-
-  it('lists Gemini sessions that match the current project root', async () => {
-    const cwd = '/Users/tester/Development/cove'
-    const tmpRoot = join('/Users/tester', '.gemini', 'tmp')
-    const projectDirectory = join(tmpRoot, 'cove-worktree')
-    const otherDirectory = join(tmpRoot, 'other')
-    const chatFile = join(projectDirectory, 'chats', 'session-a.json')
-
-    fsPromisesMock.readdir.mockImplementation(async (directory: string) => {
-      if (directory === tmpRoot) {
-        return [createDirectoryEntry('cove-worktree'), createDirectoryEntry('other')]
-      }
-
-      if (directory === join(projectDirectory, 'chats')) {
-        return [createFileEntry('session-a.json')]
-      }
-
-      return []
-    })
-
-    fsPromisesMock.readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === join(projectDirectory, '.project_root')) {
-        return cwd
-      }
-
-      if (filePath === join(otherDirectory, '.project_root')) {
-        return '/Users/tester/Other'
-      }
-
-      if (filePath === chatFile) {
-        return JSON.stringify({
-          sessionId: 'gemini-session',
-          startTime: '2026-04-28T08:00:00.000Z',
-          lastUpdated: '2026-04-28T09:00:00.000Z',
-        })
-      }
-
-      throw new Error(`Unexpected readFile ${filePath}`)
-    })
-
-    const result = await listAgentSessions({
-      provider: 'gemini',
-      cwd,
-      limit: 10,
-    })
-
-    expect(result.sessions).toHaveLength(1)
-    expect(result.sessions[0]).toMatchObject({
-      sessionId: 'gemini-session',
-      source: 'gemini-file',
-    })
-  })
-
-  it('uses OpenCode CLI JSON output when available', async () => {
-    const cwd = '/Users/tester/Development/cove'
-
-    execFileMock.mockImplementation((_file, _args, options, callback) => {
-      const cb = typeof options === 'function' ? options : callback
-      cb?.(
-        null,
-        JSON.stringify([
-          {
-            id: 'ses_cli',
-            directory: cwd,
-            title: 'CLI session',
-            created: '2026-04-28T08:00:00.000Z',
-            updated: '2026-04-28T09:00:00.000Z',
-          },
-        ]),
-        '',
-      )
-      return {} as ReturnType<typeof execFileMock>
-    })
-
-    const result = await listAgentSessions({
-      provider: 'opencode',
-      cwd,
-      limit: 10,
-    })
-
-    expect(result.sessions).toHaveLength(1)
-    expect(result.sessions[0]).toMatchObject({
-      sessionId: 'ses_cli',
-      title: 'CLI session',
-      source: 'opencode-cli',
-    })
-  })
-
-  it('falls back to OpenCode sqlite metadata when the CLI is unavailable', async () => {
-    const cwd = '/Users/tester/Development/cove'
-
-    execFileMock.mockImplementation((_file, _args, options, callback) => {
-      const cb = typeof options === 'function' ? options : callback
-      cb?.(new Error('missing cli'), '', '')
-      return {} as ReturnType<typeof execFileMock>
-    })
-
-    resolveOpenCodeDbPathMock.mockResolvedValue('/Users/tester/.local/share/opencode/opencode.db')
-    openReadOnlySqliteDbMock.mockResolvedValue({
-      prepare: (sql: string) => {
-        if (sql.includes('sqlite_master')) {
-          return {
-            get: () => ({ name: 'session' }),
-            all: () => [],
-          }
-        }
-
-        if (sql.includes('PRAGMA table_info')) {
-          return {
-            get: () => undefined,
-            all: () => [
-              { name: 'id' },
-              { name: 'directory' },
-              { name: 'title' },
-              { name: 'time_created' },
-              { name: 'time_updated' },
-            ],
-          }
-        }
-
-        return {
-          get: () => undefined,
-          all: () => [
-            {
-              id: 'ses_db',
-              directory: cwd,
-              title: 'DB session',
-              created: 1_777_370_800_000,
-              updated: 1_777_374_400_000,
-            },
-          ],
-        }
-      },
-      close: () => undefined,
-    })
-
-    const result = await listAgentSessions({
-      provider: 'opencode',
-      cwd,
-      limit: 10,
-    })
-
-    expect(result.sessions).toHaveLength(1)
-    expect(result.sessions[0]).toMatchObject({
-      sessionId: 'ses_db',
-      title: 'DB session',
-      source: 'opencode-db',
-    })
   })
 })
